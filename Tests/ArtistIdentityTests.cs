@@ -116,6 +116,8 @@ internal static partial class Program
         }
         catch (OperationCanceledException) { }
 
+        await CheckArtistMatchingAsync();
+        await CheckArtistCachePriorityAsync();
         await CheckArtistPersistenceAsync();
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), new FakePlayer(),
             artistIdentityService: service);
@@ -202,7 +204,7 @@ internal static partial class Program
 
     private sealed class MemoryArtistStore : IArtistIdentityStore
     {
-        public Dictionary<string, CachedArtistIdentity> Entries { get; } = [];
+        public System.Collections.Concurrent.ConcurrentDictionary<string, CachedArtistIdentity> Entries { get; } = new();
         public CachedArtistIdentity? LoadArtistIdentity(string key) => Entries.GetValueOrDefault(key);
         public void SaveArtistIdentity(string key, CachedArtistIdentity entry) => Entries[key] = entry;
     }

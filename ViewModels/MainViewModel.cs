@@ -145,7 +145,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         bool monitorLibrary = true,
         IReleaseTypeStore? releaseTypeStore = null,
         IFileLocationService? fileLocationService = null,
-        IArtistIdentityService? artistIdentityService = null)
+        IArtistIdentityService? artistIdentityService = null,
+        IArtistPhotoService? artistPhotoService = null)
     {
         _filePickerService = filePickerService;
         _folderPickerService = folderPickerService;
@@ -178,6 +179,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         InitializePlaybackSession(playbackSessionStore);
         InitializeLibraryMaintenance(libraryRefreshService, trackMatchPicker, monitorLibrary);
         _artistIdentityService = artistIdentityService;
+        ArtistPhotoService = artistPhotoService;
         InitializeMusicBrowser(releaseTypeStore);
     }
 

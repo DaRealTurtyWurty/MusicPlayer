@@ -28,7 +28,9 @@ internal static partial class Program
             vm.SelectedPage = page;
             Layout();
             var tiles = (ItemsControl)view.FindName("MusicTiles");
-            var covers = Descendants(tiles).OfType<PlaylistCover>().Count();
+            var covers = page == AppPage.Artists
+                ? Descendants(tiles).OfType<ArtistArtwork>().Count()
+                : Descendants(tiles).OfType<PlaylistCover>().Count();
             Console.WriteLine($"GALLERY: {page}: {stopwatch.Elapsed.TotalMilliseconds:F1} ms; {covers} realized covers / {tiles.Items.Count} items");
             Check(covers is > 0 and < 40 && tiles.Items.Count == 1000,
                 $"{page} realizes only viewport cards for a large library");

@@ -1,10 +1,12 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MusicPlayer.Models;
 
 namespace MusicPlayer.Services;
@@ -12,16 +14,11 @@ namespace MusicPlayer.Services;
 /// <summary>Resolves identities, never artwork or changes to the user's audio files.</summary>
 public sealed class MusicBrainzArtistService(IArtistIdentityStore? store = null, HttpClient? client = null) : IArtistIdentityService
 {
-    private static readonly HttpClient SharedClient = new() { Timeout = TimeSpan.FromSeconds(20) };
-    // Shared across service instances, including retries. MusicBrainz requires <= 1 request/second.
-    private static readonly SemaphoreSlim RequestGate = new(1, 1);
-    private static DateTimeOffset _nextRequest;
     private readonly SemaphoreSlim _lookupGate = new(1, 1);
-    private readonly Dictionary<string, CachedArtistIdentity> _cache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CachedArtistIdentity> _cache = new(StringComparer.Ordinal);
 
-    public async Task<ArtistIdentity> IdentifyAsync(string artist, IReadOnlyList<Track> tracks, CancellationToken cancellationToken)
+    private static ArtistIdentity? TaggedIdentity(string artist, IReadOnlyList<Track> tracks)
     {
-        cancellationToken.ThrowIfCancellationRequested();
         var ids = tracks.Select(t => MusicBrainzId.Normalize(t.MusicBrainzArtistId)).OfType<string>().Distinct().ToArray();
         if (ids.Length > 1) return new(ArtistIdentityStatus.Ambiguous, Source: ArtistIdentitySource.Tags);
         if (ids.Length == 1) return new(ArtistIdentityStatus.Identified, ids[0], artist, ArtistIdentitySource.Tags);
@@ -29,29 +26,79 @@ public sealed class MusicBrainzArtistService(IArtistIdentityStore? store = null,
             return new(ArtistIdentityStatus.NotFound);
         // Wait for the existing library's one-time metadata upgrade before searching names.
         if (tracks.Any(t => t.MetadataVersion < 1 && !t.IsMissing)) return new(ArtistIdentityStatus.Unavailable);
+        return null;
+    }
 
+    private sealed record LookupContext(string Key, string LegacyKey, string[] Albums, string[] Titles);
+
+    private static LookupContext Context(string artist, IReadOnlyList<Track> tracks)
+    {
         var albums = tracks.Select(t => t.Album).OfType<string>().Where(a => !string.IsNullOrWhiteSpace(a))
+            .Select(Normalize).Distinct().Order(StringComparer.Ordinal).ToArray();
+        var titles = tracks.Select(t => t.Title).Where(t => !string.IsNullOrWhiteSpace(t))
             .Select(Normalize).Distinct().Order(StringComparer.Ordinal).ToArray();
         // Context is part of the key: two artists with the same name must not share a cached match.
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new { Version = 2, Artist = Normalize(artist), Albums = albums, Titles = titles }))));
+        var legacyKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             JsonSerializer.Serialize(new { Version = 1, Artist = Normalize(artist), Albums = albums }))));
+        return new(key, legacyKey, albums, titles);
+    }
+
+    public ArtistIdentity? GetKnownIdentity(string artist, IReadOnlyList<Track> tracks) =>
+        TaggedIdentity(artist, tracks) ?? ReadKnownIdentity(Context(artist, tracks));
+
+    private ArtistIdentity? ReadKnownIdentity(LookupContext context)
+    {
+        var cached = _cache.GetValueOrDefault(context.Key);
+        if (cached is null)
+        {
+            cached = Load(context.Key);
+            if (cached is not null) cached = _cache.GetOrAdd(context.Key, cached);
+        }
+        // Never roll back a newer result to an older version's answer, even if expired.
+        if (cached is not null) return Usable(cached) ? cached.Identity : null;
+
+        // The v2 upgrade improves failed matches; it need not discard a still-valid
+        // successful v1 match for the exact same artist/album context.
+        var legacy = Load(context.LegacyKey);
+        if (legacy?.Identity.Status != ArtistIdentityStatus.Identified || !Usable(legacy)) return null;
+        cached = _cache.GetOrAdd(context.Key, legacy);
+        if (ReferenceEquals(cached, legacy)) Save(context.Key, legacy); // Preserve the original expiry.
+        return Usable(cached) ? cached.Identity : null;
+    }
+
+    private static bool Usable(CachedArtistIdentity entry) => entry.ExpiresAt > DateTimeOffset.UtcNow &&
+        Enum.IsDefined(entry.Identity.Status) && (entry.Identity.Status != ArtistIdentityStatus.Identified ||
+            MusicBrainzId.Normalize(entry.Identity.MusicBrainzId) is not null);
+
+    private CachedArtistIdentity? Load(string key)
+    {
+        try { return store?.LoadArtistIdentity(key); }
+        catch (Exception ex) { Trace.TraceWarning($"Could not read artist identity cache: {ex.Message}"); return null; }
+    }
+
+    private void Save(string key, CachedArtistIdentity entry)
+    {
+        try { store?.SaveArtistIdentity(key, entry); }
+        catch (Exception ex) { Trace.TraceWarning($"Could not save artist identity cache: {ex.Message}"); }
+    }
+
+    public async Task<ArtistIdentity> IdentifyAsync(string artist, IReadOnlyList<Track> tracks, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (TaggedIdentity(artist, tracks) is { } tagged) return tagged;
+        var context = Context(artist, tracks);
+        // Local hits must not queue behind a different artist's slow HTTP request.
+        if (ReadKnownIdentity(context) is { } known) return known;
         await _lookupGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!_cache.TryGetValue(key, out var cached))
-            {
-                try { cached = store?.LoadArtistIdentity(key); }
-                catch (Exception ex) { Trace.TraceWarning($"Could not read artist identity cache: {ex.Message}"); }
-            }
-            if (cached is not null && cached.ExpiresAt > DateTimeOffset.UtcNow)
-            {
-                _cache[key] = cached;
-                return cached.Identity;
-            }
+            if (ReadKnownIdentity(context) is { } cached) return cached;
 
             ArtistIdentity result;
-            try { result = await SearchAsync(artist.Trim(), albums, cancellationToken).ConfigureAwait(false); }
+            try { result = await SearchAsync(artist.Trim(), context.Albums, context.Titles, cancellationToken).ConfigureAwait(false); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidDataException or InvalidOperationException)
             {
@@ -66,95 +113,120 @@ public sealed class MusicBrainzArtistService(IArtistIdentityStore? store = null,
                 _ => TimeSpan.FromDays(7)
             };
             var entry = new CachedArtistIdentity(result, DateTimeOffset.UtcNow + lifetime);
-            _cache[key] = entry;
+            _cache[context.Key] = entry;
             if (result.Status != ArtistIdentityStatus.Unavailable)
             {
-                try { store?.SaveArtistIdentity(key, entry); }
-                catch (Exception ex) { Trace.TraceWarning($"Could not save artist identity cache: {ex.Message}"); }
+                Save(context.Key, entry);
             }
             return result;
         }
         finally { _lookupGate.Release(); }
     }
 
-    private async Task<ArtistIdentity> SearchAsync(string artist, string[] albums, CancellationToken token)
+    private sealed record Candidate(string Id, string? Name, int Score);
+
+    private async Task<ArtistIdentity> SearchAsync(string artist, string[] albums, string[] titles, CancellationToken token)
     {
-        using var response = await GetAsync("artist", $"artist:{Quote(artist)}", token).ConfigureAwait(false);
+        using var response = await GetAsync("artist", $"(artist:{Quote(artist)} OR alias:{Quote(artist)})", token).ConfigureAwait(false);
         var root = response.RootElement;
         if (!root.TryGetProperty("artists", out var artists) || artists.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("MusicBrainz returned no artist list.");
         var candidates = artists.EnumerateArray().Where(a => MatchesName(a, artist))
-            .Select(a => new { Id = MusicBrainzId.Normalize(Text(a, "id")), Name = Text(a, "name"), Score = Score(a) })
-            .Where(a => a.Id is not null).DistinctBy(a => a.Id).ToArray();
+            .Where(a => MusicBrainzId.Normalize(Text(a, "id")) is not null)
+            .Select(a => new Candidate(MusicBrainzId.Normalize(Text(a, "id"))!, Text(a, "name"), Score(a)))
+            .DistinctBy(a => a.Id).ToDictionary(a => a.Id, StringComparer.Ordinal);
         // Do not infer uniqueness from an incomplete search response.
-        var truncated = !root.TryGetProperty("count", out var count) || !count.TryGetInt32(out var total) || total > artists.GetArrayLength();
-        if (truncated) return new(ArtistIdentityStatus.Ambiguous);
-        if (candidates.Length == 1 && candidates[0].Score >= 95)
-            return new(ArtistIdentityStatus.Identified, candidates[0].Id, candidates[0].Name);
-        if (candidates.Length == 0) return new(ArtistIdentityStatus.NotFound);
+        var truncated = !Complete(root, artists);
+        if (!truncated && candidates.Count == 1 && candidates.Values.Single().Score >= 95)
+            return Identified(candidates.Values.Single());
+        if (!truncated && candidates.Count == 0) return new(ArtistIdentityStatus.NotFound);
 
-        // For same-name artists, require an exact release title and matching artist credit.
+        // A broad/truncated artist search cannot prove uniqueness, but complete album
+        // or recording searches can still identify the artist through their credits.
         HashSet<string>? supported = null;
         foreach (var album in albums.Take(3))
         {
-            using var releases = await GetAsync("release-group", $"releasegroup:{Quote(album)} AND artist:{Quote(artist)}", token)
-                .ConfigureAwait(false);
-            var releaseRoot = releases.RootElement;
-            if (!releaseRoot.TryGetProperty("release-groups", out var groups) || groups.ValueKind != JsonValueKind.Array)
-                throw new InvalidDataException("MusicBrainz returned no release-group list.");
-            if (!releaseRoot.TryGetProperty("count", out var releaseCount) || !releaseCount.TryGetInt32(out var releaseTotal) ||
-                releaseTotal > groups.GetArrayLength()) continue;
-            var matches = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var group in groups.EnumerateArray())
+            foreach (var title in TitleVariants(album, album: true))
             {
-                if (Normalize(Text(group, "title") ?? "") != album || !group.TryGetProperty("artist-credit", out var credits) ||
-                    credits.ValueKind != JsonValueKind.Array) continue;
-                foreach (var credit in credits.EnumerateArray())
-                    if (credit.TryGetProperty("artist", out var creditedArtist) &&
-                        (MatchesName(creditedArtist, artist) || Normalize(Text(credit, "name") ?? "") == Normalize(artist)) &&
-                        MusicBrainzId.Normalize(Text(creditedArtist, "id")) is { } id && candidates.Any(c => c.Id == id))
-                        matches.Add(id);
+                var matches = await ContextMatchesAsync("release-group", "release-groups", "releasegroup", title, artist, candidates, token)
+                    .ConfigureAwait(false);
+                if (matches.Count == 0) continue;
+                if (supported is null) supported = matches;
+                else supported.IntersectWith(matches);
+                break; // Prefer the full title when it supplies evidence.
             }
-            if (matches.Count == 0) continue;
-            if (supported is null) supported = matches;
-            else supported.IntersectWith(matches);
         }
-        if (supported is { Count: 1 })
+        if (supported is { Count: 1 }) return Identified(candidates[supported.Single()]);
+        // Conflicting albums must not be overridden by whichever track happens to come first.
+        if (supported is { Count: 0 }) return new(ArtistIdentityStatus.Ambiguous);
+        foreach (var title in titles.Take(3))
         {
-            var match = candidates.Single(c => c.Id == supported.Single());
-            return new(ArtistIdentityStatus.Identified, match.Id, match.Name);
+            foreach (var variant in TitleVariants(title, album: false))
+            {
+                var matches = await ContextMatchesAsync("recording", "recordings", "recording", variant, artist, candidates, token)
+                    .ConfigureAwait(false);
+                if (matches.Count == 0) continue;
+                if (supported is null) supported = matches;
+                else supported.IntersectWith(matches);
+                break;
+            }
         }
-        return new(ArtistIdentityStatus.Ambiguous);
+        return supported is { Count: 1 } ? Identified(candidates[supported.Single()]) : new(ArtistIdentityStatus.Ambiguous);
     }
 
-    private async Task<JsonDocument> GetAsync(string entity, string query, CancellationToken token)
+    private async Task<HashSet<string>> ContextMatchesAsync(string entity, string list, string titleField, string title,
+        string artist, Dictionary<string, Candidate> candidates, CancellationToken token)
     {
-        for (var attempt = 0; ; attempt++)
+        var artistTerms = new[] { $"artist:{Quote(artist)}", $"artistname:{Quote(artist)}" }
+            .Concat(candidates.Keys.Take(20).Select(id => $"arid:{id}"));
+        using var response = await GetAsync(entity, $"{titleField}:{Quote(title)} AND ({string.Join(" OR ", artistTerms)})", token)
+            .ConfigureAwait(false);
+        var root = response.RootElement;
+        if (!root.TryGetProperty(list, out var items) || items.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"MusicBrainz returned no {list} list.");
+        var matches = new HashSet<string>(StringComparer.Ordinal);
+        if (!Complete(root, items)) return matches;
+        foreach (var item in items.EnumerateArray())
         {
-            await RequestGate.WaitAsync(token).ConfigureAwait(false);
-            try
+            if (NormalizeTitle(Text(item, "title") ?? "") != title ||
+                !item.TryGetProperty("artist-credit", out var credits) || credits.ValueKind != JsonValueKind.Array) continue;
+            foreach (var credit in credits.EnumerateArray())
             {
-                var delay = _nextRequest - DateTimeOffset.UtcNow;
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, token).ConfigureAwait(false);
-                _nextRequest = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(1100);
-                using var request = new HttpRequestMessage(HttpMethod.Get,
-                    $"https://musicbrainz.org/ws/2/{entity}?query={Uri.EscapeDataString(query)}&fmt=json&limit=100");
-                request.Headers.UserAgent.ParseAdd("MusicPlayer/1.0 (https://github.com/DaRealTurtyWurty/MusicPlayer)");
-                request.Headers.Accept.ParseAdd("application/json");
-                using var response = await (client ?? SharedClient).SendAsync(request, token).ConfigureAwait(false);
-                if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-                {
-                    var retry = response.Headers.RetryAfter?.Date ??
-                                DateTimeOffset.UtcNow + (response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(5));
-                    if (retry > _nextRequest) _nextRequest = retry;
-                    if (attempt == 0) continue;
-                }
-                response.EnsureSuccessStatusCode();
-                return JsonDocument.Parse(await response.Content.ReadAsStringAsync(token).ConfigureAwait(false));
+                if (!credit.TryGetProperty("artist", out var creditedArtist) ||
+                    MusicBrainzId.Normalize(Text(creditedArtist, "id")) is not { } id) continue;
+                if (!candidates.ContainsKey(id) && !MatchesName(creditedArtist, artist) &&
+                    Normalize(Text(credit, "name") ?? "") != Normalize(artist)) continue;
+                candidates.TryAdd(id, new(id, Text(creditedArtist, "name"), 0));
+                matches.Add(id);
             }
-            finally { RequestGate.Release(); }
         }
+        return matches;
     }
+
+    private static ArtistIdentity Identified(Candidate candidate) => new(ArtistIdentityStatus.Identified, candidate.Id, candidate.Name);
+    private static bool Complete(JsonElement root, JsonElement items) => root.TryGetProperty("count", out var count) &&
+        count.TryGetInt32(out var total) && total <= items.GetArrayLength();
+
+    private static string NormalizeTitle(string value) => Regex.Replace(Normalize(value).Replace('’', '\'').Replace('‘', '\''),
+        @"\s+", " ", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    private static IEnumerable<string> TitleVariants(string value, bool album)
+    {
+        var exact = NormalizeTitle(value);
+        yield return exact;
+        // Only remove recognized trailing metadata, not arbitrary subtitles, numbers,
+        // remixes, live versions, or Taylor's Version distinctions.
+        var annotations = album
+            ? @"(?:FEAT\.?|FT\.?|FEATURING)\s+[^)\]]+|(?:DELUXE|EXPANDED|SPECIAL|ANNIVERSARY)(?:\s+(?:EDITION|VERSION))?(?:\s*-\s*(?:EXPLICIT|CLEAN))?|EXPLICIT|CLEAN"
+            : @"(?:FEAT\.?|FT\.?|FEATURING)\s+[^)\]]+";
+        var stripped = Regex.Replace(exact, @"(?:\s*[\(\[](?:(?:" + annotations + @"))[\)\]])+$", "",
+            RegexOptions.None, TimeSpan.FromSeconds(1)).Trim();
+        if (stripped.Length > 0 && stripped != exact) yield return stripped;
+    }
+
+    private Task<JsonDocument> GetAsync(string entity, string query, CancellationToken token) =>
+        MusicMetadataHttp.JsonAsync(client ?? MusicMetadataHttp.Client,
+            new Uri($"https://musicbrainz.org/ws/2/{entity}?query={Uri.EscapeDataString(query)}&fmt=json&limit=100"), token);
 
     private static string Normalize(string value) => value.Trim().Normalize(NormalizationForm.FormC).ToUpperInvariant();
     private static string Quote(string value) => "\"" + string.Concat(value.Select(c =>

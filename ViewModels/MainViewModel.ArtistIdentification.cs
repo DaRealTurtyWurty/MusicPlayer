@@ -7,6 +7,7 @@ namespace MusicPlayer.ViewModels;
 
 public partial class MainViewModel
 {
+    public IArtistPhotoService? ArtistPhotoService { get; }
     private IArtistIdentityService? _artistIdentityService;
     private CancellationTokenSource? _artistIdentificationCancellation;
     private DispatcherTimer? _artistIdentificationRetry;
@@ -39,15 +40,29 @@ public partial class MainViewModel
         {
             try
             {
-                foreach (var group in groups)
+                async Task Publish(MusicGroup group, ArtistIdentity result)
                 {
-                    token.ThrowIfCancellationRequested();
-                    var result = await service.IdentifyAsync(group.Name, group.Tracks, token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
                     await _positionTimer.Dispatcher.InvokeAsync(() =>
                     {
                         if (!token.IsCancellationRequested && !_musicBrowserDisposed) group.Identification.Result = result;
                     });
+                }
+                var unresolved = new List<MusicGroup>();
+                // Publish every local hit before starting even the first network request.
+                // Otherwise an uncached artist near the top can hide already-cached photos.
+                foreach (var group in groups)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (service.GetKnownIdentity(group.Name, group.Tracks) is { } known)
+                        await Publish(group, known);
+                    else unresolved.Add(group);
+                }
+                foreach (var group in unresolved)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var result = await service.IdentifyAsync(group.Name, group.Tracks, token).ConfigureAwait(false);
+                    await Publish(group, result);
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { }

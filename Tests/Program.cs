@@ -8,6 +8,39 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--artist-cache-smoke"])
+        {
+            DispatcherTest.Run(CheckArtistCachePriorityAsync);
+            return;
+        }
+        if (args is ["--artist-matching-live"])
+        {
+            DispatcherTest.Run(CheckArtistMatchingLiveAsync);
+            return;
+        }
+        if (args is ["--artist-photo-smoke"] or ["--artist-photo-live"] or ["--artist-deezer-live"] or ["--artist-custom-smoke"] or ["--artist-deezer-search-smoke"])
+        {
+            var photoApp = new App();
+            photoApp.InitializeComponent();
+            photoApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(args[0] switch
+            {
+                "--artist-photo-live" => CheckArtistPhotoLiveAsync,
+                "--artist-deezer-live" => CheckDeezerLiveAsync,
+                "--artist-deezer-search-smoke" => async () =>
+                {
+                    using var temporary = new TemporaryTestDirectory("MusicPlayerDeezerSearchTests");
+                    await CheckDeezerSearchAsync(temporary.Path);
+                },
+                "--artist-custom-smoke" => async () =>
+                {
+                    using var temporary = new TemporaryTestDirectory("MusicPlayerCustomPhotoTests");
+                    await CheckCustomArtistPhotosAsync(temporary.Path);
+                },
+                _ => CheckArtistPhotosAsync
+            });
+            return;
+        }
         if (args is ["--artist-identity-live"])
         {
             DispatcherTest.Run(async () =>
@@ -161,6 +194,7 @@ internal static partial class Program
         var app = new App();
         app.InitializeComponent();
         app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+        DispatcherTest.Run(CheckArtistPhotosAsync);
         DispatcherTest.Run(CheckReleaseTypesAsync);
         DispatcherTest.Run(CheckMusicBrowserAsync);
         DispatcherTest.Run(CheckGalleryPerformanceAsync);
