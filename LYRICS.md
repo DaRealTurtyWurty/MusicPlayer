@@ -1,4 +1,4 @@
-# Local lyrics: LRC, TTML and Lyricsfile
+# Local lyrics: sidecars and embedded tags
 
 `ILocalLyricsSource` / `LocalLyricsSource` is the discovery and loading entry point:
 
@@ -11,11 +11,57 @@ It opens same-directory, same-basename sidecars in this order: `.ttml`,
 `.lyricsfile.yaml`, then `.lrc` (for example `01 - Song.lyricsfile.yaml` beside
 `01 - Song.flac`). Only a missing file falls back to the next format. An invalid
 or inaccessible preferred file is reported so another version is not silently substituted.
-Windows filename matching is case-insensitive. It does
-not search recursively, guess from artist/title, read audio tags or use a network
-lyrics service. Pass `lyricsFilePath` to load an explicit selection instead; an
+When all three sidecars are absent, it reads embedded lyrics from the audio file.
+Windows filename matching is case-insensitive. It does not search recursively,
+guess from artist/title or use a network lyrics service.
+Pass `lyricsFilePath` to load an explicit selection instead; an
 unusable selection does not silently fall back. File selection UI and persistence
 are not part of this layer.
+
+`EmbeddedLyricsReader` uses TagLibSharp with a read-only file abstraction and
+shared read access, so lyrics can load during playback and from read-only files.
+Loading does not save tags, extract sidecars, or modify the audio. Tags are reread
+on each lyrics load, including after toggling lyrics off and on.
+
+Supported embedded fields include:
+
+- MP3/ID3v2 `SYLT` (synchronized lyrics) and `USLT` (plain text or embedded LRC).
+  SYLT accepts absolute millisecond timing and lyric content frames. LRCGET's
+  complete-line entries become line lyrics; entries with newline boundaries
+  become word/syllable groups. Spaces remain part of their original text.
+  Empty cues end the preceding sung text. Missing ends use the next distinct
+  line/word onset or available audio duration. SYLT does not provide explicit
+  end times or singer roles; they are not reconstructed from the audio.
+- FLAC/Ogg Vorbis comment fields `LYRICS` and `UNSYNCEDLYRICS`, including
+  LRCGET's synced/plain pairing. `SYNCEDLYRICS`, `SYNCHRONIZEDLYRICS`,
+  `UNSYNCED LYRICS`, `TTML`, and `LYRICSFILE` are also recognized.
+  The same names are supported in ID3v2 `TXXX` and APEv2 tags.
+- Standard TagLib lyric properties, including M4A/MP4 `©lyr` and ASF `WM/Lyrics`.
+
+Text fields containing LRC, Enhanced LRC, TTML or Lyricsfile use the corresponding
+parser. Other text displays as plain lyrics without highlighting or seeking.
+The embedded `[au: instrumental]` marker is recognized. Within audio tags,
+instrumental declarations take priority, followed by usable word timing, line
+timing, then plain lyrics. Equivalent candidates keep tag enumeration order;
+different languages or duplicate renditions are not merged. A damaged timed
+candidate can fall back to another usable embedded tag with a warning. Sidecars
+still override all embedded versions, including when a sidecar is unusable.
+
+Successfully read tags set `LocalLyricsResult.IsEmbedded`; `FilePath` is the
+audio path. Loaded documents also include `source=embedded`, `embedded_tag`,
+and the ID3 language when available. Unsupported SYLT MPEG-frame timing units
+are skipped with a diagnostic, rather than interpreted as milliseconds.
+
+A small SYLT frame decoder is registered once at assembly initialization to
+correct TagLibSharp 2.3.0's dropped final empty cue. It retains TagLib's frame
+header and encoding handling, preserves UTF-8/UTF-16 text, and rejects truncated
+timestamps. It changes no on-disk data.
+
+Focused verification: `--embedded-lyrics-smoke` exercises raw ID3 frames matching
+[LRCGET's export layout](https://github.com/tranxuanthang/lrcget/blob/main/src-tauri/src/export.rs),
+FLAC, Ogg, M4A and APE tags, source priority, unchanged audio bytes, shared/read-only
+access, reloads, error handling, and Now Playing synchronization. All audio
+fixtures are synthetic and tests write tags only to temporary copies.
 
 `LyricsfileParser.Parse` reads the [Lyricsfile 1.0 draft](https://github.com/tranxuanthang/lyricsfile/blob/main/SPECIFICATION.md)
 used by LRCGET/LRCLIB. The compound `.lyricsfile.yaml` extension is required for

@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MusicPlayer.Services;
 
-/// <summary>Loads an explicit file, or a same-basename TTML, Lyricsfile or LRC sidecar, in that order.</summary>
+/// <summary>Loads an explicit file, or TTML, Lyricsfile, LRC sidecars followed by embedded audio lyrics.</summary>
 public sealed class LocalLyricsSource : ILocalLyricsSource
 {
     public Task<LocalLyricsResult> LoadAsync(string audioFilePath, TimeSpan? duration = null,
@@ -33,7 +33,11 @@ public sealed class LocalLyricsSource : ILocalLyricsSource
                     try { stream = Open(path); break; }
                     catch (FileNotFoundException) when (lyricsFilePath is null) { }
                 }
-                if (stream is null) return new LocalLyricsResult(LocalLyricsStatus.NotFound, path);
+                if (stream is null)
+                {
+                    path = Path.GetFullPath(audioFilePath);
+                    return new EmbeddedLyricsReader().Load(path, duration, cancellationToken);
+                }
                 // Only absence falls back. Invalid/unreadable lyrics must not silently select another version.
                 await using var ownedStream = stream;
                 using var reader = new StreamReader(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true);
@@ -54,6 +58,14 @@ public sealed class LocalLyricsSource : ILocalLyricsSource
             catch (DecoderFallbackException)
             {
                 return new LocalLyricsResult(LocalLyricsStatus.Invalid, path, Error: "Lyrics must be UTF-8 or Unicode with a byte-order mark.");
+            }
+            catch (TagLib.UnsupportedFormatException)
+            {
+                return new LocalLyricsResult(LocalLyricsStatus.NotFound, path);
+            }
+            catch (TagLib.CorruptFileException)
+            {
+                return new LocalLyricsResult(LocalLyricsStatus.Invalid, path, Error: "The audio file's embedded lyrics could not be read because its tags or file structure are damaged.");
             }
             catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
             {

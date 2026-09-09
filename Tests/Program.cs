@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--embedded-lyrics-smoke"])
+        {
+            var embeddedApp = new App();
+            embeddedApp.InitializeComponent();
+            embeddedApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(CheckEmbeddedLyricsViewModelAsync);
+            return;
+        }
         if (args is ["--lyricsfile-smoke"])
         {
             var lyricsfileApp = new App();
@@ -155,6 +163,7 @@ internal static partial class Program
         CheckLyricsAsync().GetAwaiter().GetResult();
         CheckTtmlAsync().GetAwaiter().GetResult();
         CheckLyricsfileAsync().GetAwaiter().GetResult();
+        CheckEmbeddedLyricsAsync().GetAwaiter().GetResult();
         DispatcherTest.Run(CheckLyricsViewModelAsync);
         var player = new FakePlayer();
         DispatcherTest.Run(CheckArtistIdentityAsync);

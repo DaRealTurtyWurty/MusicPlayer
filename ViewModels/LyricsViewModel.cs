@@ -160,7 +160,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
             }
             (StatusTitle, StatusDetail) = result.Status switch
             {
-                LocalLyricsStatus.NotFound => ("No local lyrics", "Place an .lrc, .ttml or .lyricsfile.yaml file with the same name beside this audio file."),
+                LocalLyricsStatus.NotFound => ("No local lyrics", "No embedded lyrics found. Place an .lrc, .ttml or .lyricsfile.yaml file with the same name beside this audio file."),
                 LocalLyricsStatus.Invalid => ("No usable lyrics", result.Error ?? "This file does not contain valid timed lyrics."),
                 _ => ("Could not load lyrics", "The lyrics file could not be read. Check that it is accessible.")
             };

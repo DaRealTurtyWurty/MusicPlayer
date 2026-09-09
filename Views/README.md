@@ -9,7 +9,9 @@ line and word/syllable highlighting, click-to-seek and automatic following. TTML
 supports named singers and independently highlighted backing/overlapping vocals.
 Lyricsfile (`.lyricsfile.yaml`) supports word timing and overlaps, plain lyrics
 without seeking or following, and instrumental status. Narrow layouts place
-lyrics below compact track details. Turning lyrics back on rereads the matching sidecar; see
+lyrics below compact track details. When no sidecar exists, embedded audio tags
+supply timed or plain lyrics, including LRCGET MP3/FLAC exports. Turning lyrics
+back on rereads the matching sidecar or embedded tags; see
 `../LYRICS.md` for discovery rules, timing behavior and focused tests.
 
 To add a page, add a value to `Models/AppPage.cs`, create a user control here, and register its data template,

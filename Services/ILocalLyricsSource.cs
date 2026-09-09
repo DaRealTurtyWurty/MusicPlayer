@@ -11,4 +11,7 @@ public interface ILocalLyricsSource
 public enum LocalLyricsStatus { Loaded, NotFound, Invalid, Unavailable }
 
 public sealed record LocalLyricsResult(LocalLyricsStatus Status, string? FilePath,
-    LyricsDocument? Document = null, string? Error = null);
+    LyricsDocument? Document = null, string? Error = null)
+{
+    public bool IsEmbedded { get; init; }
+}
