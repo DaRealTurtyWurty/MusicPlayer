@@ -13,8 +13,11 @@ namespace MusicPlayer.Views;
 public partial class NowPlayingView : UserControl
 {
     private LyricsViewModel? _lyrics;
+    private MainViewModel? _main;
+    private bool _rendering;
     private bool _attached;
     private bool _following = true;
+    private bool _resettingScrollAnimation;
     private DispatcherOperation? _pendingFollow;
 
     public NowPlayingView() => InitializeComponent();
@@ -23,11 +26,16 @@ public partial class NowPlayingView : UserControl
     {
         _attached = true;
         AttachLyrics();
+        IsVisibleChanged += View_IsVisibleChanged;
     }
 
     private void View_Unloaded(object sender, RoutedEventArgs e)
     {
         _attached = false;
+        IsVisibleChanged -= View_IsVisibleChanged;
+        if (_main is not null) _main.PropertyChanged -= Main_PropertyChanged;
+        _main = null;
+        UpdateRenderingSubscription();
         if (_lyrics is not null) _lyrics.PropertyChanged -= Lyrics_PropertyChanged;
         _lyrics = null;
         _pendingFollow?.Abort();
@@ -41,15 +49,20 @@ public partial class NowPlayingView : UserControl
 
     private void AttachLyrics()
     {
+        if (_main is not null) _main.PropertyChanged -= Main_PropertyChanged;
         if (_lyrics is not null) _lyrics.PropertyChanged -= Lyrics_PropertyChanged;
-        _lyrics = (DataContext as MainViewModel)?.Lyrics;
+        _main = DataContext as MainViewModel;
+        if (_main is not null) _main.PropertyChanged += Main_PropertyChanged;
+        _lyrics = _main?.Lyrics;
         if (_lyrics is not null) _lyrics.PropertyChanged += Lyrics_PropertyChanged;
         ResumeFollowing();
         UpdateLayoutMode();
+        UpdateRenderingSubscription();
     }
 
     private void Lyrics_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(LyricsViewModel.IsEnabled) or nameof(LyricsViewModel.HasLyrics)) UpdateRenderingSubscription();
         if (e.PropertyName == nameof(LyricsViewModel.IsEnabled)) UpdateLayoutMode();
         if (e.PropertyName == nameof(LyricsViewModel.Lines))
         {
@@ -59,6 +72,24 @@ public partial class NowPlayingView : UserControl
         }
         if (e.PropertyName == nameof(LyricsViewModel.ActiveLine)) ScheduleFollow();
     }
+
+    private void Main_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsPlaying)) UpdateRenderingSubscription();
+    }
+
+    private void View_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateRenderingSubscription();
+
+    private void UpdateRenderingSubscription()
+    {
+        var enabled = _attached && IsVisible && _main?.IsPlaying == true && _lyrics is { IsEnabled: true, HasLyrics: true };
+        if (enabled == _rendering) return;
+        _rendering = enabled;
+        if (enabled) CompositionTarget.Rendering += OnRendering;
+        else CompositionTarget.Rendering -= OnRendering;
+    }
+
+    private void OnRendering(object? sender, EventArgs e) => _main?.RefreshLyricsPosition();
 
     private void View_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateLayoutMode();
 
@@ -103,8 +134,7 @@ public partial class NowPlayingView : UserControl
         var top = container.TranslatePoint(new Point(), LyricsScroll).Y + LyricsScroll.VerticalOffset;
         var target = Math.Clamp(top - LyricsScroll.ViewportHeight * 0.3, 0, LyricsScroll.ScrollableHeight);
         var current = LyricsScroll.VerticalOffset;
-        BeginAnimation(AnimatedOffsetProperty, null);
-        SetValue(AnimatedOffsetProperty, current);
+        StopScrollAnimation();
         if (!SystemParameters.ClientAreaAnimation)
         {
             LyricsScroll.ScrollToVerticalOffset(target);
@@ -118,7 +148,10 @@ public partial class NowPlayingView : UserControl
 
     private static readonly DependencyProperty AnimatedOffsetProperty = DependencyProperty.Register(
         "AnimatedOffset", typeof(double), typeof(NowPlayingView), new PropertyMetadata(0d, (sender, args) =>
-            ((NowPlayingView)sender).LyricsScroll.ScrollToVerticalOffset((double)args.NewValue)));
+        {
+            var view = (NowPlayingView)sender;
+            if (!view._resettingScrollAnimation) view.LyricsScroll.ScrollToVerticalOffset((double)args.NewValue);
+        }));
 
     private void PauseFollowing()
     {
@@ -131,9 +164,15 @@ public partial class NowPlayingView : UserControl
     private void StopScrollAnimation()
     {
         var current = LyricsScroll.VerticalOffset;
-        BeginAnimation(AnimatedOffsetProperty, null);
-        SetValue(AnimatedOffsetProperty, current);
-        LyricsScroll.ScrollToVerticalOffset(current);
+        // Removing an animation changes its DP value. Don't enqueue an old scroll
+        // position here: that command can execute AFTER the user's wheel/key input.
+        _resettingScrollAnimation = true;
+        try
+        {
+            BeginAnimation(AnimatedOffsetProperty, null);
+            SetValue(AnimatedOffsetProperty, current);
+        }
+        finally { _resettingScrollAnimation = false; }
     }
 
     private void ResumeFollowing()
@@ -143,7 +182,16 @@ public partial class NowPlayingView : UserControl
         ScheduleFollow();
     }
 
-    private void Lyrics_ManualScroll(object sender, MouseWheelEventArgs e) => PauseFollowing();
+    private void Lyrics_ManualScroll(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0 || LyricsScroll.ScrollableHeight <= 0 || !LyricsScroll.IsVisible) return;
+        PauseFollowing();
+        var distance = SystemParameters.WheelScrollLines < 0
+            ? LyricsScroll.ViewportHeight : SystemParameters.WheelScrollLines * 24d;
+        LyricsScroll.ScrollToVerticalOffset(Math.Clamp(
+            LyricsScroll.VerticalOffset - e.Delta / 120d * distance, 0, LyricsScroll.ScrollableHeight));
+        e.Handled = true;
+    }
     private void Lyrics_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         for (var node = e.OriginalSource as DependencyObject; node is Visual; node = VisualTreeHelper.GetParent(node))

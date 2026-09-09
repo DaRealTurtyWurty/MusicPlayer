@@ -12,6 +12,16 @@ public sealed partial class LyricLineViewModel(LyricLine line) : ObservableObjec
     public string Text => string.IsNullOrWhiteSpace(Line.Text) ? "•••" : Line.Text;
     public string SeekLabel => $"Seek to {Line.Start:m\\:ss}: {Text}";
     [ObservableProperty] private bool isActive;
+    [ObservableProperty] private double lyricSeconds;
+
+    public double GetSegmentProgress(int index)
+    {
+        var segment = Line.Segments[index];
+        if (LyricSeconds < segment.Start.TotalSeconds) return 0;
+        // With no usable end there is no honest duration to interpolate; highlight at onset.
+        if (segment.End is not { } end || end <= segment.Start) return 1;
+        return Math.Clamp((LyricSeconds - segment.Start.TotalSeconds) / (end.TotalSeconds - segment.Start.TotalSeconds), 0, 1);
+    }
 }
 
 /// <summary>Owns local lyrics loading and line selection, independently of the Now Playing view lifetime.</summary>
@@ -143,9 +153,12 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         LyricLineViewModel? active = null;
         foreach (var row in Lines)
         {
+            var wasActive = row.IsActive;
             row.IsActive = (_duration is null || seconds < _duration.Value.TotalSeconds) &&
                 row.Line.Start.TotalSeconds <= lyricSeconds &&
                 (row.Line.End is null || lyricSeconds < row.Line.End.Value.TotalSeconds);
+            // Only active rows need per-frame notifications. Inactive rows draw a dim line.
+            if (row.IsActive || wasActive) row.LyricSeconds = lyricSeconds;
             if (row.IsActive) active = row;
         }
         ActiveLine = active;

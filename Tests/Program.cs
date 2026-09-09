@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--lyrics-enhanced-smoke"])
+        {
+            var enhancedApp = new App();
+            enhancedApp.InitializeComponent();
+            enhancedApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(CheckEnhancedLyricsAsync);
+            return;
+        }
         if (args is ["--lyrics-view-smoke"])
         {
             var lyricsApp = new App();

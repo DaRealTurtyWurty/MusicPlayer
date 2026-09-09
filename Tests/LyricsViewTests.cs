@@ -174,7 +174,16 @@ internal static partial class Program
             await Task.Delay(350);
             view.UpdateLayout();
             Check(scroll.VerticalOffset > 0, "Automatic scrolling follows later lines");
-            scroll.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, -120) { RoutedEvent = UIElement.PreviewMouseWheelEvent });
+            var beforeWheel = scroll.VerticalOffset;
+            button.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120) { RoutedEvent = UIElement.PreviewMouseWheelEvent });
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            view.UpdateLayout();
+            Check(scroll.VerticalOffset < beforeWheel, "Wheel-up over a lyric button moves the viewport after auto-follow animation");
+            var afterWheelUp = scroll.VerticalOffset;
+            panel.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, -120) { RoutedEvent = UIElement.PreviewMouseWheelEvent });
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            view.UpdateLayout();
+            Check(scroll.VerticalOffset > afterWheelUp, "Wheel-down over the lyrics panel moves the viewport in the other direction");
             var resume = (Button)view.FindName("ResumeFollowingButton");
             Check(resume.Visibility == Visibility.Visible, "Manual scrolling offers Resume following");
             scroll.ScrollToTop();

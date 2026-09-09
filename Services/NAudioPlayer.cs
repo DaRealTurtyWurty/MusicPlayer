@@ -12,6 +12,8 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
     private VolumeSampleProvider? _volumeProvider;
     private float _volume = 1f;
     private bool _playRequested;
+    private TimeSpan _outputOrigin;
+    private bool _presentationEnded;
 
     public event EventHandler? PlaybackEnded;
 
@@ -20,6 +22,17 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
 
     public TimeSpan Duration =>
         _audioFile?.TotalTime ?? TimeSpan.Zero;
+
+    public TimeSpan PresentationPosition
+    {
+        get
+        {
+            if (_presentationEnded) return Duration;
+            if (_outputDevice is null || _outputDevice.PlaybackState == PlaybackState.Stopped) return _outputOrigin;
+            var renderedSeconds = _outputDevice.GetPosition() / (double)_outputDevice.OutputWaveFormat.AverageBytesPerSecond;
+            return TimeSpan.FromSeconds(Math.Clamp(_outputOrigin.TotalSeconds + renderedSeconds, 0, Duration.TotalSeconds));
+        }
+    }
 
     public float Volume
     {
@@ -41,9 +54,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
         {
             _audioFile = CreateReader(filePath);
             _volumeProvider = new VolumeSampleProvider(_audioFile.ToSampleProvider()) { Volume = _volume };
-            _outputDevice = new WaveOut();
-            _outputDevice.Init(_volumeProvider);
-            _outputDevice.PlaybackStopped += OnPlaybackStopped;
+            InitializeOutput();
         }
         catch
         {
@@ -81,9 +92,12 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
     public void Stop()
     {
         _playRequested = false;
-        _outputDevice?.Stop();
+        DisposeOutput();
 
         _audioFile?.Position = 0;
+        _outputOrigin = TimeSpan.Zero;
+        _presentationEnded = false;
+        if (_volumeProvider is not null) InitializeOutput();
     }
 
     public void Seek(TimeSpan position)
@@ -97,20 +111,45 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
         if (position > _audioFile.TotalTime)
             position = _audioFile.TotalTime;
 
+        if (_outputDevice?.PlaybackState == PlaybackState.Stopped && _audioFile.CurrentTime == position && !_presentationEnded)
+            return;
+
+        var resume = _outputDevice?.PlaybackState == PlaybackState.Playing;
+        // A new output discards pre-seek buffers and gives the rendered byte counter a
+        // fresh origin. Detach first so the old output cannot end the current track.
+        DisposeOutput();
         _audioFile.CurrentTime = position;
+        _outputOrigin = _audioFile.CurrentTime;
+        _presentationEnded = false;
+        InitializeOutput();
+        if (resume) Play();
+    }
+
+    private void InitializeOutput()
+    {
+        _outputDevice = new WaveOut();
+        _outputDevice.Init(_volumeProvider!);
+        _outputDevice.PlaybackStopped += OnPlaybackStopped;
+    }
+
+    private void DisposeOutput()
+    {
+        if (_outputDevice is not null) _outputDevice.PlaybackStopped -= OnPlaybackStopped;
+        _outputDevice?.Dispose();
+        _outputDevice = null;
     }
 
     private void DisposePlayback()
     {
         _playRequested = false;
-        if (_outputDevice is not null)
-            _outputDevice.PlaybackStopped -= OnPlaybackStopped;
-        _outputDevice?.Dispose();
+        DisposeOutput();
         _audioFile?.Dispose();
 
         _outputDevice = null;
         _audioFile = null;
         _volumeProvider = null;
+        _outputOrigin = TimeSpan.Zero;
+        _presentationEnded = false;
     }
 
     private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
@@ -121,6 +160,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IDisposable
             return;
 
         _playRequested = false;
+        _presentationEnded = true;
         PlaybackEnded?.Invoke(this, EventArgs.Empty);
     }
 

@@ -39,7 +39,7 @@ not require cache invalidation.
 
 All document timestamps remain in the source time coordinate system. `Offset`
 is metadata and **has not been applied** to line or segment timestamps. The
-future synchronizer should apply it once: `lyricsTime = playbackPosition + Offset`
+synchronizer applies it once: `lyricsTime = playbackPosition + Offset`
 (positive LRC offset advances display). A user-facing delay adjustment is separate
 and has the opposite sign. Keep negative effective timestamps when applying an
 offset rather than collapsing early lines onto zero. A final duration-derived
@@ -47,9 +47,23 @@ end represents the audio track boundary, not the end of a sung word.
 
 The parsed model is independent of WPF. `MainViewModel.Lyrics` owns a
 `LyricsViewModel` that loads on track changes, cancels stale loads, selects active
-lines and handles click-to-seek. It uses the existing playback position updates
-(250 ms); Enhanced LRC currently displays and highlights whole lines. A more
-precise audible playback clock and word-level animation remain future work.
+lines and handles click-to-seek. Enhanced LRC words and syllables fill continuously
+between their start and end timestamps; completed segments stay bright until the
+line ends. Ordinary LRC still highlights the whole active line. Missing or
+zero-length segment ends highlight at onset instead of inventing a duration.
+
+`KaraokeLine` shapes the entire line with WPF, preserving spaces, punctuation,
+Unicode text and wrapping. Cached text-range geometry clips a bright copy over
+the dim text. Segment progress can span several visual rows, with right-to-left
+segments filling in their reading direction. Layout is rebuilt only for text,
+width, font, DPI or brush changes, not on each frame.
+
+The visible Now Playing view samples `IAudioPlayer.PresentationPosition` on WPF
+rendering frames while playing. NAudio derives that position from the output
+device's rendered-byte counter rather than the decoder's buffered read position.
+Seeking discards queued audio and resets the device origin; pause freezes the
+clock. Hidden, unloaded and paused views unsubscribe from frame callbacks. The
+existing 250 ms timer still maintains lyrics state outside the active view.
 
 Now Playing shows lyrics beside artwork in wide windows and below compact track
 details in narrow windows. The header's Show lyrics / Hide lyrics button saves
@@ -78,3 +92,7 @@ directory first:
 dotnet build Tests/MusicPlayer.QueueTests.csproj --artifacts-path artifacts/lyrics-view
 dotnet artifacts/lyrics-view/bin/MusicPlayer.QueueTests/debug_win-x64/MusicPlayer.QueueTests.dll --lyrics-view-smoke
 ```
+
+`--lyrics-enhanced-smoke` tests segment timing, visible fill progression,
+backward seeks, wrapping, right-to-left text and the native output clock with a
+silent WAV. The native checks report a skip if no output device is installed.

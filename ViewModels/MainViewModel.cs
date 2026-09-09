@@ -552,16 +552,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PositionSeconds = _audioPlayer.Position.TotalSeconds;
 
         _updatingPosition = false;
+        RefreshLyricsPosition();
     }
 
     partial void OnPositionSecondsChanged(double value)
     {
-        Lyrics.UpdatePosition(value);
         if (_updatingPosition)
             return;
 
         _audioPlayer.Seek(TimeSpan.FromSeconds(value));
+        RefreshLyricsPosition();
     }
+
+    public void RefreshLyricsPosition() => Lyrics.UpdatePosition(_audioPlayer.PresentationPosition.TotalSeconds);
+
+    partial void OnIsPlayingChanged(bool value) => RefreshLyricsPosition();
 
     private void SeekToLyrics(double seconds) => PositionSeconds = Math.Clamp(seconds, 0, DurationSeconds);
 

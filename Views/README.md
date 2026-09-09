@@ -5,7 +5,7 @@
 it.
 
 Now Playing displays local LRC lyrics with a persistent show/hide toggle,
-line highlighting, click-to-seek and automatic following. Narrow layouts place
+line and Enhanced LRC word/syllable highlighting, click-to-seek and automatic following. Narrow layouts place
 lyrics below compact track details. Turning lyrics back on rereads the matching sidecar; see
 `../LYRICS.md` for discovery rules, timing behavior and focused tests.
 

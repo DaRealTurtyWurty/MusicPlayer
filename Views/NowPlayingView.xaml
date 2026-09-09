@@ -83,6 +83,7 @@
             </ScrollViewer>
             <Border x:Name="LyricsPanel" Grid.Column="1" Background="{StaticResource PanelBrush}"
                     CornerRadius="12" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                    PreviewMouseWheel="Lyrics_ManualScroll"
                     Visibility="{Binding Lyrics.IsEnabled, Converter={StaticResource BoolVisibility}}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
@@ -93,7 +94,7 @@
                     <TextBlock Text="Lyrics" FontSize="14" FontWeight="SemiBold" Margin="8,8,0,18" />
                     <ScrollViewer x:Name="LyricsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled" CanContentScroll="False"
-                                  PreviewMouseWheel="Lyrics_ManualScroll" PreviewMouseDown="Lyrics_PreviewMouseDown"
+                                  PreviewMouseDown="Lyrics_PreviewMouseDown"
                                   PreviewKeyDown="Lyrics_PreviewKeyDown"
                                   Visibility="{Binding Lyrics.HasLyrics, Converter={StaticResource BoolVisibility}}">
                         <ItemsControl x:Name="LyricsItems" ItemsSource="{Binding Lyrics.Lines}" Margin="0,30,0,100">
@@ -118,8 +119,10 @@
                                                         <ControlTemplate TargetType="Button">
                                                             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                                                <TextBlock Text="{TemplateBinding Content}" TextWrapping="Wrap"
-                                                                           Foreground="{TemplateBinding Foreground}" />
+                                                                <icons:KaraokeLine Row="{Binding}"
+                                                                           Foreground="{TemplateBinding Foreground}"
+                                                                           DimBrush="{StaticResource MutedBrush}"
+                                                                           HighlightBrush="{StaticResource TextBrush}" />
                                                             </Border>
                                                         </ControlTemplate>
                                                     </Setter.Value>

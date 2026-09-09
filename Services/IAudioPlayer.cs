@@ -6,6 +6,9 @@ public interface IAudioPlayer
 
     TimeSpan Position { get; }
 
+    /// <summary>Output presentation position for synchronized visuals; excludes decoded audio still queued.</summary>
+    TimeSpan PresentationPosition => Position;
+
     TimeSpan Duration { get; }
 
     /// <summary>Playback gain from 0 (silent) to 1 (full volume).</summary>
