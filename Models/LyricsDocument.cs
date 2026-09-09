@@ -1,6 +1,6 @@
 namespace MusicPlayer.Models;
 
-public enum LyricsTimingMode { Line, Segment }
+public enum LyricsTimingMode { Line, Segment, Plain }
 
 /// <summary>Parsed source timestamps. Offset is retained separately and has NOT been applied.</summary>
 public sealed record LyricsDocument(
@@ -9,16 +9,19 @@ public sealed record LyricsDocument(
     TimeSpan Offset,
     IReadOnlyList<LyricsDiagnostic> Diagnostics)
 {
-    public LyricsTimingMode TimingMode => Lines.Any(line => line.Segments.Count > 0)
+    public string? PlainText { get; init; }
+    public bool IsInstrumental { get; init; }
+    public LyricsTimingMode TimingMode => !Lines.Any(line => !string.IsNullOrWhiteSpace(line.Text)) && !string.IsNullOrWhiteSpace(PlainText) ? LyricsTimingMode.Plain : Lines.Any(line => line.Segments.Count > 0)
         ? LyricsTimingMode.Segment : LyricsTimingMode.Line;
 
-    public bool HasLyrics => Lines.Any(line => !string.IsNullOrWhiteSpace(line.Text));
+    public bool HasLyrics => Lines.Any(line => !string.IsNullOrWhiteSpace(line.Text)) || !string.IsNullOrWhiteSpace(PlainText);
 }
 
 /// <param name="End">Null when no end can be determined from the file or track duration.</param>
 public sealed record LyricLine(string Text, TimeSpan Start, TimeSpan? End, bool IsEndInferred,
     IReadOnlyList<LyricSegment> Segments)
 {
+    public bool IsTimed { get; init; } = true;
     public string? VocalistId { get; init; }
     public string? VocalistName { get; init; }
     public bool IsBackground { get; init; }

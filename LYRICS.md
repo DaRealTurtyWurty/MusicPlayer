@@ -1,4 +1,4 @@
-# Local lyrics: LRC and TTML
+# Local lyrics: LRC, TTML and Lyricsfile
 
 `ILocalLyricsSource` / `LocalLyricsSource` is the discovery and loading entry point:
 
@@ -7,15 +7,64 @@ var result = await lyricsSource.LoadAsync(track.FilePath, track.Duration,
     cancellationToken: cancellationToken);
 ```
 
-It opens a same-directory, same-basename `.ttml` or `.lrc` (for example
-`01 - Song.ttml` beside `01 - Song.flac`). TTML takes precedence when both are
-present; only a missing TTML falls back to LRC. An invalid or inaccessible TTML
-is reported so an unintended lyrics version is not silently substituted.
+It opens same-directory, same-basename sidecars in this order: `.ttml`,
+`.lyricsfile.yaml`, then `.lrc` (for example `01 - Song.lyricsfile.yaml` beside
+`01 - Song.flac`). Only a missing file falls back to the next format. An invalid
+or inaccessible preferred file is reported so another version is not silently substituted.
 Windows filename matching is case-insensitive. It does
 not search recursively, guess from artist/title, read audio tags or use a network
 lyrics service. Pass `lyricsFilePath` to load an explicit selection instead; an
 unusable selection does not silently fall back. File selection UI and persistence
 are not part of this layer.
+
+`LyricsfileParser.Parse` reads the [Lyricsfile 1.0 draft](https://github.com/tranxuanthang/lyricsfile/blob/main/SPECIFICATION.md)
+used by LRCGET/LRCLIB. The compound `.lyricsfile.yaml` extension is required for
+discovery and explicit loading; unrelated `.yaml` files are not treated as lyrics.
+Line and word timestamps are absolute integer milliseconds. Explicit overlaps
+remain intact, and words retain their whitespace and syllable boundaries. If
+word text differs from the fallback line text, timed word text takes precedence
+with a diagnostic. Invalid word timing falls back to line highlighting; invalid
+lines are skipped. Structural YAML errors and unsupported versions reject the file.
+
+Missing word ends use the next distinct word start or the line end. A missing
+line end uses the latest word end when every word has one. Otherwise, presentation
+lasts five seconds beyond the final word start (or line start), capped by the
+available track duration without cutting off explicit word intervals. Another
+line's onset never truncates these intervals. Inferred ends are marked in memory;
+the source file is never rewritten.
+
+Plain-only files display preserved line breaks without timed highlighting or
+seeking. Timed lyrics take precedence over the separate `plain` version.
+Instrumental files show an instrumental status. `metadata.offset_ms` is retained
+but not applied because the draft leaves its meaning undefined; nonzero values
+produce a visible warning. Singer/background-role fields are not yet standardized
+by Lyricsfile, so overlapping lines do not receive invented singer labels.
+
+YamlDotNet handles YAML syntax, including flow collections, escaped strings and
+block text. Loading rejects duplicate keys, multiple documents, custom tags,
+anchors/aliases, more than 64 nested collections, and more than 4,194,304 UTF-16
+code units. Unknown fields with supported YAML value types are ignored.
+
+Example `Song.lyricsfile.yaml`:
+
+```yaml
+version: '1.0'
+metadata:
+  title: Two voices
+  artist: Maya & Alex
+lines:
+  - text: 'Stay with me'
+    start_ms: 2000
+    end_ms: 8000
+    words:
+      - {text: 'Stay ', start_ms: 2000, end_ms: 4000}
+      - {text: 'with me', start_ms: 4000, end_ms: 8000}
+  - {text: 'Through the night', start_ms: 4000, end_ms: 10000}
+```
+
+Focused verification: run the queue-test executable with `--lyricsfile-smoke`.
+It exercises parsing, discovery, overlapping playback, plain/instrumental states,
+and actual Now Playing rendering.
 
 `TtmlParser.Parse` imports lyrics in the `http://www.w3.org/ns/ttml` namespace:
 

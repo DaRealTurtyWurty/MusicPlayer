@@ -170,7 +170,7 @@ public partial class NowPlayingView : UserControl
         _following = false;
         _pendingFollow?.Abort();
         StopScrollAnimation();
-        ResumeFollowingButton.Visibility = Visibility.Visible;
+        ResumeFollowingButton.Visibility = _lyrics?.Lines.Any(row => row.IsTimed) == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void StopScrollAnimation()

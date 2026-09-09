@@ -9,13 +9,15 @@ namespace MusicPlayer.ViewModels;
 public sealed partial class LyricLineViewModel(LyricLine line) : ObservableObject
 {
     public LyricLine Line { get; } = line;
-    public string Text => string.IsNullOrWhiteSpace(Line.Text) ? "•••" : Line.Text;
+    public string Text => Line.IsTimed && string.IsNullOrWhiteSpace(Line.Text) ? "•••" : Line.Text;
+    public bool IsTimed => Line.IsTimed;
+    public string? SeekHint => IsTimed ? "Click to play from this line" : null;
     public string VocalLabel => Line.IsBackground ? string.IsNullOrWhiteSpace(Line.VocalistName) ? "Backing vocals" : $"{Line.VocalistName} · Backing vocals"
         : Line.VocalistName ?? "";
     public bool HasVocalLabel => VocalLabel.Length > 0;
     public bool IsBackground => Line.IsBackground;
     public bool IsSecondaryVocal { get; init; }
-    public string SeekLabel => $"Seek to {Line.Start:m\\:ss}: {VocalLabel} {Text}";
+    public string SeekLabel => IsTimed ? $"Seek to {Line.Start:m\\:ss}: {VocalLabel} {Text}" : Text;
     [ObservableProperty] private bool isActive;
     [ObservableProperty] private double lyricSeconds;
 
@@ -136,20 +138,29 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
                 _document = document;
                 var voices = document.Lines.Where(line => !line.IsBackground && line.VocalistId is not null)
                     .Select(line => line.VocalistId!).Distinct(StringComparer.Ordinal).ToList();
-                Lines = Array.AsReadOnly(document.Lines.Select(line => new LyricLineViewModel(line)
+                var displayLines = document.TimingMode == LyricsTimingMode.Plain
+                    ? (document.PlainText ?? "").ReplaceLineEndings("\n").Split('\n').Select(text =>
+                        new LyricLine(text, TimeSpan.Zero, null, false, []) { IsTimed = false })
+                    : document.Lines;
+                Lines = Array.AsReadOnly(displayLines.Select(line => new LyricLineViewModel(line)
                 {
                     IsSecondaryVocal = line.VocalistId is { } id && voices.IndexOf(id) % 2 == 1
                 }).ToArray());
                 HasLyrics = true;
                 StatusTitle = StatusDetail = "";
-                Warning = document.Diagnostics.Count == 0 ? null :
-                    "Some lyrics could not be read. Showing the usable lines.";
+                Warning = document.Diagnostics.Count == 0 ? null : document.Diagnostics[0].Message;
                 UpdatePosition(_position);
+                return;
+            }
+            if (result.Status == LocalLyricsStatus.Loaded && result.Document?.IsInstrumental == true)
+            {
+                StatusTitle = "Instrumental";
+                StatusDetail = "This track has no vocal lyrics.";
                 return;
             }
             (StatusTitle, StatusDetail) = result.Status switch
             {
-                LocalLyricsStatus.NotFound => ("No local lyrics", "Place an .lrc or .ttml file with the same name beside this audio file."),
+                LocalLyricsStatus.NotFound => ("No local lyrics", "Place an .lrc, .ttml or .lyricsfile.yaml file with the same name beside this audio file."),
                 LocalLyricsStatus.Invalid => ("No usable lyrics", result.Error ?? "This file does not contain valid timed lyrics."),
                 _ => ("Could not load lyrics", "The lyrics file could not be read. Check that it is accessible.")
             };
@@ -166,7 +177,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         foreach (var row in Lines)
         {
             var wasActive = row.IsActive;
-            row.IsActive = (_duration is null || seconds < _duration.Value.TotalSeconds) &&
+            row.IsActive = row.IsTimed && (_duration is null || seconds < _duration.Value.TotalSeconds) &&
                 row.Line.Start.TotalSeconds <= lyricSeconds &&
                 (row.Line.End is null || lyricSeconds < row.Line.End.Value.TotalSeconds);
             // Only active rows need per-frame notifications. Inactive rows draw a dim line.
@@ -181,7 +192,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SeekToLine(LyricLineViewModel? row)
     {
-        if (_disposed || !IsEnabled || _document is null || row is null || !Lines.Contains(row)) return;
+        if (_disposed || !IsEnabled || _document is null || row is null || !row.IsTimed || !Lines.Contains(row)) return;
         SeekRequested?.Invoke(Math.Clamp(row.Line.Start.TotalSeconds - _document.Offset.TotalSeconds,
             0, _duration?.TotalSeconds ?? double.MaxValue));
     }

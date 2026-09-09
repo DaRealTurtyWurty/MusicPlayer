@@ -103,7 +103,8 @@
                                     <Button Content="{Binding Text}" Click="Lyric_Click"
                                             Command="{Binding DataContext.Lyrics.SeekToLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding}" HorizontalContentAlignment="Stretch"
-                                            AutomationProperties.Name="{Binding SeekLabel}" ToolTip="Click to play from this line">
+                                            IsEnabled="{Binding IsTimed}"
+                                            AutomationProperties.Name="{Binding SeekLabel}" ToolTip="{Binding SeekHint}">
                                         <Button.Style>
                                             <Style TargetType="Button">
                                                 <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
@@ -139,6 +140,10 @@
                                                     </Setter.Value>
                                                 </Setter>
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTimed}" Value="False">
+                                                        <Setter Property="Cursor" Value="Arrow" />
+                                                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding HasVocalLabel}" Value="True">
                                                         <Setter Property="Margin" Value="0,2,28,2" />
                                                     </DataTrigger>
