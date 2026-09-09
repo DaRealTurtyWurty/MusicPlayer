@@ -4,8 +4,9 @@
 `PlaylistsView`, and `NowPlayingView`; playback stays in the shared `MainViewModel` so changing pages does not interrupt
 it.
 
-Now Playing displays local LRC lyrics with a persistent show/hide toggle,
-line and Enhanced LRC word/syllable highlighting, click-to-seek and automatic following. Narrow layouts place
+Now Playing displays local LRC/TTML lyrics with a persistent show/hide toggle,
+line and word/syllable highlighting, click-to-seek and automatic following. TTML
+supports named singers and independently highlighted backing/overlapping vocals. Narrow layouts place
 lyrics below compact track details. Turning lyrics back on rereads the matching sidecar; see
 `../LYRICS.md` for discovery rules, timing behavior and focused tests.
 

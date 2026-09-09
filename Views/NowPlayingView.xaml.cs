@@ -70,7 +70,7 @@ public partial class NowPlayingView : UserControl
             LyricsScroll.ScrollToTop();
             ResumeFollowing();
         }
-        if (e.PropertyName == nameof(LyricsViewModel.ActiveLine)) ScheduleFollow();
+        if (e.PropertyName is nameof(LyricsViewModel.ActiveLine) or nameof(LyricsViewModel.ActiveLines)) ScheduleFollow();
     }
 
     private void Main_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -132,7 +132,19 @@ public partial class NowPlayingView : UserControl
         if (!_attached || !_following || _lyrics?.ActiveLine is not { } active || !LyricsScroll.IsVisible) return;
         if (LyricsItems.ItemContainerGenerator.ContainerFromItem(active) is not FrameworkElement container) return;
         var top = container.TranslatePoint(new Point(), LyricsScroll).Y + LyricsScroll.VerticalOffset;
-        var target = Math.Clamp(top - LyricsScroll.ViewportHeight * 0.3, 0, LyricsScroll.ScrollableHeight);
+        var bottom = top + container.ActualHeight;
+        var groupTop = top;
+        var groupBottom = bottom;
+        foreach (var row in _lyrics.ActiveLines)
+        {
+            if (LyricsItems.ItemContainerGenerator.ContainerFromItem(row) is not FrameworkElement part) continue;
+            var y = part.TranslatePoint(new Point(), LyricsScroll).Y + LyricsScroll.VerticalOffset;
+            groupTop = Math.Min(groupTop, y);
+            groupBottom = Math.Max(groupBottom, y + part.ActualHeight);
+        }
+        if (groupBottom - groupTop <= LyricsScroll.ViewportHeight * 0.85) { top = groupTop; bottom = groupBottom; }
+        var target = Math.Max(top - LyricsScroll.ViewportHeight * 0.3, Math.Min(top, bottom - LyricsScroll.ViewportHeight * 0.9));
+        target = Math.Clamp(target, 0, LyricsScroll.ScrollableHeight);
         var current = LyricsScroll.VerticalOffset;
         StopScrollAnimation();
         if (!SystemParameters.ClientAreaAnimation)

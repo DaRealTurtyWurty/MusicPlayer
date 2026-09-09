@@ -119,15 +119,37 @@
                                                         <ControlTemplate TargetType="Button">
                                                             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                                                <icons:KaraokeLine Row="{Binding}"
+                                                                <StackPanel>
+                                                                    <TextBlock x:Name="VoiceLabel" Text="{Binding VocalLabel}" FontSize="11"
+                                                                               FontWeight="Normal" Margin="0,0,0,6" Foreground="{StaticResource MutedBrush}"
+                                                                               Visibility="{Binding HasVocalLabel, Converter={StaticResource BoolVisibility}}" />
+                                                                    <icons:KaraokeLine x:Name="VocalText" Row="{Binding}"
                                                                            Foreground="{TemplateBinding Foreground}"
                                                                            DimBrush="{StaticResource MutedBrush}"
                                                                            HighlightBrush="{StaticResource TextBrush}" />
+                                                                </StackPanel>
                                                             </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSecondaryVocal}" Value="True">
+                                                                    <Setter TargetName="VocalText" Property="TextAlignment" Value="Right" />
+                                                                    <Setter TargetName="VoiceLabel" Property="TextAlignment" Value="Right" />
+                                                                </DataTrigger>
+                                                            </ControlTemplate.Triggers>
                                                         </ControlTemplate>
                                                     </Setter.Value>
                                                 </Setter>
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasVocalLabel}" Value="True">
+                                                        <Setter Property="Margin" Value="0,2,28,2" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsSecondaryVocal}" Value="True">
+                                                        <Setter Property="Margin" Value="28,2,0,2" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsBackground}" Value="True">
+                                                        <Setter Property="FontSize" Value="20" />
+                                                        <Setter Property="Margin" Value="24,0,24,4" />
+                                                        <Setter Property="Padding" Value="14,10" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsActive}" Value="True">
                                                         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                                                         <Setter Property="Background" Value="{StaticResource RaisedBrush}" />

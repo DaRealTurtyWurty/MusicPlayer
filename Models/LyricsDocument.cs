@@ -17,7 +17,14 @@ public sealed record LyricsDocument(
 
 /// <param name="End">Null when no end can be determined from the file or track duration.</param>
 public sealed record LyricLine(string Text, TimeSpan Start, TimeSpan? End, bool IsEndInferred,
-    IReadOnlyList<LyricSegment> Segments);
+    IReadOnlyList<LyricSegment> Segments)
+{
+    public string? VocalistId { get; init; }
+    public string? VocalistName { get; init; }
+    public bool IsBackground { get; init; }
+    /// <summary>Parts originating in the same TTML paragraph, including its backing vocals.</summary>
+    public string? VocalGroupId { get; init; }
+}
 
 public sealed record LyricSegment(string Text, TimeSpan Start, TimeSpan? End, bool IsEndInferred);
 

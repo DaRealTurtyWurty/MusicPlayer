@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MusicPlayer.Services;
 
-/// <summary>Loads only an explicitly selected LRC or an exact same-basename sidecar.</summary>
+/// <summary>Loads an explicit lyrics file, or a same-basename TTML (preferred) or LRC sidecar.</summary>
 public sealed class LocalLyricsSource : ILocalLyricsSource
 {
     public Task<LocalLyricsResult> LoadAsync(string audioFilePath, TimeSpan? duration = null,
@@ -16,19 +16,29 @@ public sealed class LocalLyricsSource : ILocalLyricsSource
             string? path = lyricsFilePath;
             try
             {
-                path = Path.GetFullPath(lyricsFilePath ?? Path.ChangeExtension(audioFilePath, ".lrc"));
-                if (!Path.GetExtension(path).Equals(".lrc", StringComparison.OrdinalIgnoreCase))
-                    return new LocalLyricsResult(LocalLyricsStatus.Invalid, path, Error: "Choose an .lrc file.");
-
-                // Windows resolves casing, so Song.LRC also matches Song.flac. Opening directly
-                // distinguishes an absent sidecar from access errors that File.Exists would hide.
-                await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+                FileStream Open(string candidate) => new(candidate, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
                     bufferSize: 4096, useAsync: true);
+                path = Path.GetFullPath(lyricsFilePath ?? Path.ChangeExtension(audioFilePath, ".ttml"));
+                var extension = Path.GetExtension(path).ToLowerInvariant();
+                if (extension is not (".lrc" or ".ttml"))
+                    return new LocalLyricsResult(LocalLyricsStatus.Invalid, path, Error: "Choose an .lrc or .ttml file.");
+
+                FileStream stream;
+                try { stream = Open(path); }
+                catch (FileNotFoundException) when (lyricsFilePath is null)
+                {
+                    path = Path.GetFullPath(Path.ChangeExtension(audioFilePath, ".lrc"));
+                    extension = ".lrc";
+                    stream = Open(path);
+                }
+                // Only absence falls back. An invalid/unreadable TTML must not silently pick a different version.
+                await using var ownedStream = stream;
                 using var reader = new StreamReader(stream, new UTF8Encoding(false, true), detectEncodingFromByteOrderMarks: true);
                 var text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-                var document = new LrcParser().Parse(text, duration, cancellationToken);
+                var document = extension == ".ttml" ? new TtmlParser().Parse(text, duration, cancellationToken)
+                    : new LrcParser().Parse(text, duration, cancellationToken);
                 return new LocalLyricsResult(document.HasLyrics ? LocalLyricsStatus.Loaded : LocalLyricsStatus.Invalid,
-                    path, document, document.HasLyrics ? null : "No timed lyrics found in this file.");
+                    path, document, document.HasLyrics ? null : document.Diagnostics.FirstOrDefault()?.Message ?? "No timed lyrics found in this file.");
             }
             catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
             {

@@ -10,7 +10,12 @@ public sealed partial class LyricLineViewModel(LyricLine line) : ObservableObjec
 {
     public LyricLine Line { get; } = line;
     public string Text => string.IsNullOrWhiteSpace(Line.Text) ? "•••" : Line.Text;
-    public string SeekLabel => $"Seek to {Line.Start:m\\:ss}: {Text}";
+    public string VocalLabel => Line.IsBackground ? string.IsNullOrWhiteSpace(Line.VocalistName) ? "Backing vocals" : $"{Line.VocalistName} · Backing vocals"
+        : Line.VocalistName ?? "";
+    public bool HasVocalLabel => VocalLabel.Length > 0;
+    public bool IsBackground => Line.IsBackground;
+    public bool IsSecondaryVocal { get; init; }
+    public string SeekLabel => $"Seek to {Line.Start:m\\:ss}: {VocalLabel} {Text}";
     [ObservableProperty] private bool isActive;
     [ObservableProperty] private double lyricSeconds;
 
@@ -43,6 +48,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private IReadOnlyList<LyricLineViewModel> lines = Array.Empty<LyricLineViewModel>();
     [ObservableProperty] private LyricLineViewModel? activeLine;
+    [ObservableProperty] private IReadOnlyList<LyricLineViewModel> activeLines = Array.Empty<LyricLineViewModel>();
     [ObservableProperty] private string statusTitle = "Nothing playing";
     [ObservableProperty] private string statusDetail = "Play a track to see its local lyrics.";
     [ObservableProperty] private string? warning;
@@ -90,6 +96,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         _document = null;
         Lines = Array.Empty<LyricLineViewModel>();
         ActiveLine = null;
+        ActiveLines = Array.Empty<LyricLineViewModel>();
         HasLyrics = false;
         Warning = null;
         IsLoading = false;
@@ -127,7 +134,12 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
             if (result.Status == LocalLyricsStatus.Loaded && result.Document is { HasLyrics: true } document)
             {
                 _document = document;
-                Lines = Array.AsReadOnly(document.Lines.Select(line => new LyricLineViewModel(line)).ToArray());
+                var voices = document.Lines.Where(line => !line.IsBackground && line.VocalistId is not null)
+                    .Select(line => line.VocalistId!).Distinct(StringComparer.Ordinal).ToList();
+                Lines = Array.AsReadOnly(document.Lines.Select(line => new LyricLineViewModel(line)
+                {
+                    IsSecondaryVocal = line.VocalistId is { } id && voices.IndexOf(id) % 2 == 1
+                }).ToArray());
                 HasLyrics = true;
                 StatusTitle = StatusDetail = "";
                 Warning = document.Diagnostics.Count == 0 ? null :
@@ -137,7 +149,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
             }
             (StatusTitle, StatusDetail) = result.Status switch
             {
-                LocalLyricsStatus.NotFound => ("No local lyrics", "Place an .lrc file with the same name beside this audio file."),
+                LocalLyricsStatus.NotFound => ("No local lyrics", "Place an .lrc or .ttml file with the same name beside this audio file."),
                 LocalLyricsStatus.Invalid => ("No usable lyrics", result.Error ?? "This file does not contain valid timed lyrics."),
                 _ => ("Could not load lyrics", "The lyrics file could not be read. Check that it is accessible.")
             };
@@ -150,7 +162,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         if (_document is null || !double.IsFinite(seconds)) return;
         // LRC offset advances display; source timestamps themselves are never modified.
         var lyricSeconds = seconds + _document.Offset.TotalSeconds;
-        LyricLineViewModel? active = null;
+        var active = new List<LyricLineViewModel>();
         foreach (var row in Lines)
         {
             var wasActive = row.IsActive;
@@ -159,9 +171,11 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
                 (row.Line.End is null || lyricSeconds < row.Line.End.Value.TotalSeconds);
             // Only active rows need per-frame notifications. Inactive rows draw a dim line.
             if (row.IsActive || wasActive) row.LyricSeconds = lyricSeconds;
-            if (row.IsActive) active = row;
+            if (row.IsActive) active.Add(row);
         }
-        ActiveLine = active;
+        if (!ActiveLines.SequenceEqual(active)) ActiveLines = active.AsReadOnly();
+        // Backing vocals must not pull the viewport away from an ongoing lead vocal.
+        ActiveLine = active.FirstOrDefault(row => !row.IsBackground) ?? active.FirstOrDefault();
     }
 
     [RelayCommand]

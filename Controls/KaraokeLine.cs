@@ -16,10 +16,13 @@ public sealed class KaraokeLine : Control
         typeof(KaraokeLine), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender, OnLayoutChanged));
     public static readonly DependencyProperty DimBrushProperty = DependencyProperty.Register(nameof(DimBrush), typeof(Brush),
         typeof(KaraokeLine), new FrameworkPropertyMetadata(Brushes.Gray, FrameworkPropertyMetadataOptions.AffectsRender, OnLayoutChanged));
+    public static readonly DependencyProperty TextAlignmentProperty = DependencyProperty.Register(nameof(TextAlignment), typeof(TextAlignment),
+        typeof(KaraokeLine), new FrameworkPropertyMetadata(TextAlignment.Left, FrameworkPropertyMetadataOptions.AffectsMeasure, OnLayoutChanged));
 
     public LyricLineViewModel? Row { get => (LyricLineViewModel?)GetValue(RowProperty); set => SetValue(RowProperty, value); }
     public Brush HighlightBrush { get => (Brush)GetValue(HighlightBrushProperty); set => SetValue(HighlightBrushProperty, value); }
     public Brush DimBrush { get => (Brush)GetValue(DimBrushProperty); set => SetValue(DimBrushProperty, value); }
+    public TextAlignment TextAlignment { get => (TextAlignment)GetValue(TextAlignmentProperty); set => SetValue(TextAlignmentProperty, value); }
 
     private FormattedText? _dimText;
     private FormattedText? _brightText;
@@ -103,7 +106,7 @@ public sealed class KaraokeLine : Control
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         FormattedText Format(Brush brush) => new(row.Text, culture, FlowDirection, typeface, FontSize, brush, dpi)
         {
-            MaxTextWidth = width, Trimming = TextTrimming.None
+            MaxTextWidth = width, Trimming = TextTrimming.None, TextAlignment = TextAlignment
         };
         _dimText = Format(row.Line.Segments.Count > 0 ? DimBrush : Foreground);
         _brightText = Format(HighlightBrush);

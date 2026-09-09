@@ -1,4 +1,4 @@
-# Local LRC lyrics
+# Local lyrics: LRC and TTML
 
 `ILocalLyricsSource` / `LocalLyricsSource` is the discovery and loading entry point:
 
@@ -7,12 +7,61 @@ var result = await lyricsSource.LoadAsync(track.FilePath, track.Duration,
     cancellationToken: cancellationToken);
 ```
 
-It opens a same-directory, same-basename `.lrc` (for example `01 - Song.LRC`
-beside `01 - Song.flac`). Windows filename matching is case-insensitive. It does
+It opens a same-directory, same-basename `.ttml` or `.lrc` (for example
+`01 - Song.ttml` beside `01 - Song.flac`). TTML takes precedence when both are
+present; only a missing TTML falls back to LRC. An invalid or inaccessible TTML
+is reported so an unintended lyrics version is not silently substituted.
+Windows filename matching is case-insensitive. It does
 not search recursively, guess from artist/title, read audio tags or use a network
 lyrics service. Pass `lyricsFilePath` to load an explicit selection instead; an
 unusable selection does not silently fall back. File selection UI and persistence
 are not part of this layer.
+
+`TtmlParser.Parse` imports lyrics in the `http://www.w3.org/ns/ttml` namespace:
+
+- Paragraphs (`p`) become lyric groups. Timed `span` elements provide word or
+  syllable ranges. Nested containers support `begin`, `end`, `dur`, and parallel
+  or sequential timing; ancestor intervals limit their children's presentation.
+- Standard `HH:MM:SS.fraction` clock expressions and `h`, `m`, `s`, `ms`, `f`,
+  and `t` offsets are supported, including frame-rate multipliers and subframes.
+  Standard TTML child times are relative to the parent (or preceding sibling
+  for sequential containers).
+- Files declaring Apple's `http://itunes.apple.com/lyric-ttml-extensions`
+  namespace, or using its two-field `MM:SS.fraction` shorthand, use absolute
+  song-time clock expressions. Duration values remain durations. This explicit
+  convention detection avoids adding the paragraph start to every Apple word.
+- `ttm:agent` references and `ttm:name` metadata identify singers. Agent changes
+  in spans produce separate vocal parts; nested `ttm:role="x-bg"` spans produce
+  independently timed backing vocals. Backing text is excluded from the lead.
+  Translation and romanization roles are not treated as sung text.
+- Text preserves Unicode, punctuation and adjacent syllables. Default XML
+  whitespace collapses across spans; `xml:space="preserve"` and `br` retain
+  intentional spacing and line breaks.
+- Malformed intervals produce source-line diagnostics while other paragraphs
+  remain usable. XML DTDs and external entities are prohibited. Documents are
+  limited to 4 MiB of XML characters and 128 levels of timed content nesting.
+
+This is a media-time lyrics importer, not a complete TTML subtitle compositor.
+Clock/SMPTE time bases and drop-frame timing are rejected; subtitle regions,
+styling, ruby layout and animation are not implemented. TTML files without any
+timing do not become synchronized merely because an audio duration is supplied.
+
+For example, save this as `Song.ttml` beside `Song.flac`. These standard TTML
+word offsets are relative to their paragraph:
+
+```xml
+<tt xmlns="http://www.w3.org/ns/ttml"
+    xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <head><metadata>
+    <ttm:agent xml:id="lead"><ttm:name>Maya</ttm:name></ttm:agent>
+    <ttm:agent xml:id="duet"><ttm:name>Alex</ttm:name></ttm:agent>
+  </metadata></head>
+  <body><div>
+    <p begin="2s" end="8s" ttm:agent="lead"><span begin="0s" end="2s">Stay </span><span begin="2s" end="6s">with me</span><span ttm:role="x-bg" begin="1s" end="5s">(Stay with me)</span></p>
+    <p begin="4s" end="10s" ttm:agent="duet"><span begin="0s" end="2s">Through </span><span begin="2s" end="6s">the night</span></p>
+  </div></body>
+</tt>
+```
 
 Discovery, reading and parsing run off the caller's UI thread. Cancellation
 propagates as `OperationCanceledException`. Results distinguish `Loaded`,
@@ -51,6 +100,12 @@ lines and handles click-to-seek. Enhanced LRC words and syllables fill continuou
 between their start and end timestamps; completed segments stay bright until the
 line ends. Ordinary LRC still highlights the whole active line. Missing or
 zero-length segment ends highlight at onset instead of inventing a duration.
+TTML segments use the same renderer. Each vocal part keeps its own interval;
+another singer's onset never truncates it. `ActiveLines` exposes all active
+parts, while `ActiveLine` selects a lead-first scroll anchor. The view keeps all
+active parts visible when they fit. Singers alternate alignment, and backing
+vocals are labelled and inset with smaller text. If a group is taller than the
+viewport, following prioritizes the lead; manual scrolling remains available.
 
 `KaraokeLine` shapes the entire line with WPF, preserving spaces, punctuation,
 Unicode text and wrapping. Cached text-range geometry clips a bright copy over
@@ -96,3 +151,11 @@ dotnet artifacts/lyrics-view/bin/MusicPlayer.QueueTests/debug_win-x64/MusicPlaye
 `--lyrics-enhanced-smoke` tests segment timing, visible fill progression,
 backward seeks, wrapping, right-to-left text and the native output clock with a
 silent WAV. The native checks report a skip if no output device is installed.
+
+`--ttml-smoke` checks standard and Apple timing, vocal separation, whitespace,
+frames/ticks, invalid XML, sidecar precedence and overlapping-vocal rendering.
+It writes `ttml-duet-wide.png` and `ttml-duet-narrow.png` previews. The default
+test suite also includes TTML parser and discovery checks.
+
+Timing conventions follow the [W3C TTML2 specification](https://www.w3.org/TR/ttml2/)
+and lyric extensions/examples in the [Apple asset guide](https://help.apple.com/itc/videoaudioassetguide/en.lproj/static.html).

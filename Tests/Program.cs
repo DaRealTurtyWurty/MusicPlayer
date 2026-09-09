@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--ttml-smoke"])
+        {
+            var ttmlApp = new App();
+            ttmlApp.InitializeComponent();
+            ttmlApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(CheckTtmlVocalsAsync);
+            return;
+        }
         if (args is ["--lyrics-enhanced-smoke"])
         {
             var enhancedApp = new App();
@@ -137,6 +145,7 @@ internal static partial class Program
         }
         TemporaryTestDirectoryTests.Run();
         CheckLyricsAsync().GetAwaiter().GetResult();
+        CheckTtmlAsync().GetAwaiter().GetResult();
         DispatcherTest.Run(CheckLyricsViewModelAsync);
         var player = new FakePlayer();
         DispatcherTest.Run(CheckArtistIdentityAsync);
