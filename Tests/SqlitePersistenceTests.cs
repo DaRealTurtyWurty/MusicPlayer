@@ -42,7 +42,7 @@ internal static class SqlitePersistenceTests
             "Legacy JSON files remain byte-for-byte unchanged as backups");
         using (var db = Context(path))
         {
-            Check(!db.Database.HasPendingModelChanges() && db.Database.GetAppliedMigrations().Count() == 6,
+            Check(!db.Database.HasPendingModelChanges() && !db.Database.GetPendingMigrations().Any(),
                 "EF migrations match the model and are recorded in the database");
             Check(db.Tracks.Count() == 3 && db.PlaylistEntries.Count() == 3,
                 "Playlist entries reference shared track records");

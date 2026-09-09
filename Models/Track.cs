@@ -7,6 +7,9 @@ public sealed class Track
     public required string Title { get; init; }
 
     public string? Artist { get; init; }
+    public string? MusicBrainzArtistId { get; init; }
+    // Older database entries are reread once to recover artist IDs from their tags.
+    public int MetadataVersion { get; init; } = 1;
 
     public string? Album { get; init; }
     public string? ReleaseTypeTag { get; init; }
@@ -24,6 +27,7 @@ public sealed class Track
     {
         FilePath = FilePath, Title = Title, Artist = Artist, Album = Album, Duration = Duration,
         ReleaseTypeTag = ReleaseTypeTag,
+        MusicBrainzArtistId = MusicBrainzArtistId, MetadataVersion = MetadataVersion,
         ArtworkData = ArtworkData, FileSize = size, LastWriteTimeUtcTicks = modified, IsMissing = missing,
         ExplicitlyAddedToLibrary = ExplicitlyAddedToLibrary
     };

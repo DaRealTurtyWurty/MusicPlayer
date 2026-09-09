@@ -28,7 +28,8 @@ public sealed class JsonPlaylistStore(string? path = null) : IPlaylistStore
                 playlist.Tracks.Add(new Track
                 {
                     FilePath = track.FilePath, Title = track.Title ?? Path.GetFileNameWithoutExtension(track.FilePath),
-                    Artist = track.Artist, Album = track.Album, Duration = TimeSpan.FromTicks(track.DurationTicks)
+                    Artist = track.Artist, Album = track.Album, Duration = TimeSpan.FromTicks(track.DurationTicks),
+                    MusicBrainzArtistId = track.MusicBrainzArtistId, MetadataVersion = track.MetadataVersion
                 });
             }
 
@@ -39,7 +40,8 @@ public sealed class JsonPlaylistStore(string? path = null) : IPlaylistStore
     public void Save(IEnumerable<Playlist> playlists)
     {
         var saved = playlists.Select(p => new SavedPlaylist(p.Id, p.Name,
-            p.Tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks)).ToList()));
+            p.Tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks,
+                t.MusicBrainzArtistId, t.MetadataVersion)).ToList()));
         var folder = Path.GetDirectoryName(Path.GetFullPath(_path))!;
         Directory.CreateDirectory(folder);
         var temporaryPath = _path + ".tmp";
@@ -49,5 +51,6 @@ public sealed class JsonPlaylistStore(string? path = null) : IPlaylistStore
 
     private sealed record SavedPlaylist(Guid Id, string Name, List<SavedTrack> Tracks);
 
-    private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks);
+    private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks,
+        string? MusicBrainzArtistId = null, int MetadataVersion = 0);
 }

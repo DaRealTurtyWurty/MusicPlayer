@@ -10,6 +10,7 @@ public sealed record MusicGroup(
     IReadOnlyList<Track> Tracks,
     IReadOnlyList<MusicGroup> Albums)
 {
+    public ArtistIdentification Identification { get; } = new();
     public ReleaseType ReleaseType { get; init; } = ReleaseType.Unknown;
     public string ReleaseTypeHint { get; init; } = "No release-type tag found.";
     public bool IsRelease => Kind == MusicGroupKind.Album;

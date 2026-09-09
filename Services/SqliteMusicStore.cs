@@ -10,7 +10,7 @@ namespace MusicPlayer.Services;
 /// Shared library/playlist storage. Each operation owns its context and transaction;
 /// UI and import worker threads never share an EF change tracker.
 /// </summary>
-public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackSessionStore, ILibraryMaintenanceStore, ILibraryMembershipStore, IReleaseTypeStore
+public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackSessionStore, ILibraryMaintenanceStore, ILibraryMembershipStore, IReleaseTypeStore, IArtistIdentityStore
 {
     private const string LegacyImportKey = "LegacyJsonImported";
     private readonly object _gate = new();
@@ -46,6 +46,33 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
             return db.Tracks.AsNoTracking()
                 .Where(t => t.ExplicitlyAddedToLibrary || db.PlaylistEntries.Any(e => e.TrackId == t.Id))
                 .OrderBy(t => t.Id).AsEnumerable().Select(ToTrack).ToArray();
+        }
+    }
+
+    public CachedArtistIdentity? LoadArtistIdentity(string key)
+    {
+        lock (_gate)
+        {
+            using var db = Open();
+            var row = db.ArtistIdentities.AsNoTracking().SingleOrDefault(r => r.LookupKey == key);
+            return row is null ? null : new CachedArtistIdentity(
+                new ArtistIdentity(row.Status, row.MusicBrainzId, row.Name),
+                new DateTimeOffset(row.ExpiresAtUtcTicks, TimeSpan.Zero));
+        }
+    }
+
+    public void SaveArtistIdentity(string key, CachedArtistIdentity entry)
+    {
+        lock (_gate)
+        {
+            using var db = Open();
+            var row = db.ArtistIdentities.Find(key);
+            if (row is null) db.ArtistIdentities.Add(row = new StoredArtistIdentity { LookupKey = key });
+            row.Status = entry.Identity.Status;
+            row.MusicBrainzId = entry.Identity.MusicBrainzId;
+            row.Name = entry.Identity.Name;
+            row.ExpiresAtUtcTicks = entry.ExpiresAt.UtcTicks;
+            db.SaveChanges();
         }
     }
 
@@ -342,6 +369,8 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
     {
         row.Title = track.Title;
         row.Artist = track.Artist;
+        row.MusicBrainzArtistId = track.MusicBrainzArtistId;
+        row.MetadataVersion = track.MetadataVersion;
         row.Album = track.Album;
         row.ReleaseTypeTag = track.ReleaseTypeTag;
         row.DurationTicks = track.Duration.Ticks;
@@ -396,6 +425,7 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
         FilePath = track.FilePath, Title = track.Title, Artist = track.Artist,
         Album = track.Album, Duration = TimeSpan.FromTicks(track.DurationTicks),
         ReleaseTypeTag = track.ReleaseTypeTag,
+        MusicBrainzArtistId = track.MusicBrainzArtistId, MetadataVersion = track.MetadataVersion,
         FileSize = track.FileSize, LastWriteTimeUtcTicks = track.LastWriteTimeUtcTicks, IsMissing = track.IsMissing,
         ExplicitlyAddedToLibrary = track.ExplicitlyAddedToLibrary
     };

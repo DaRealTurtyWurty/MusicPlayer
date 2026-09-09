@@ -33,7 +33,7 @@ public sealed class LibraryRefreshService(IMetadataService metadata) : ILibraryR
                 // Reading Length distinguishes missing files from permission and I/O errors.
                 var size = info.Length;
                 var modified = info.LastWriteTimeUtc.Ticks;
-                if (force || track.IsMissing || size != track.FileSize || modified != track.LastWriteTimeUtcTicks)
+                if (force || track.MetadataVersion < 1 || track.IsMissing || size != track.FileSize || modified != track.LastWriteTimeUtcTicks)
                     updates.Add(ReadStableFile(track.FilePath));
             }
             catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)

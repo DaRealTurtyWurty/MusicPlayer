@@ -21,19 +21,22 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
             return new Track
             {
                 FilePath = t.FilePath, Title = t.Title ?? Path.GetFileNameWithoutExtension(t.FilePath),
-                Artist = t.Artist, Album = t.Album, Duration = TimeSpan.FromTicks(t.DurationTicks)
+                Artist = t.Artist, Album = t.Album, Duration = TimeSpan.FromTicks(t.DurationTicks),
+                MusicBrainzArtistId = t.MusicBrainzArtistId, MetadataVersion = t.MetadataVersion
             };
         }).ToArray();
     }
 
     public void Save(IEnumerable<Track> tracks)
     {
-        var saved = tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks));
+        var saved = tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks,
+            t.MusicBrainzArtistId, t.MetadataVersion));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
         var temporaryPath = _path + ".tmp";
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(saved));
         File.Move(temporaryPath, _path, overwrite: true);
     }
 
-    private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks);
+    private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks,
+        string? MusicBrainzArtistId = null, int MetadataVersion = 0);
 }

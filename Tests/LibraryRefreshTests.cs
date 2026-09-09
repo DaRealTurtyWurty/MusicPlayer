@@ -101,7 +101,7 @@ internal static class LibraryRefreshTests
         using (var db = Context())
         {
             id = db.Tracks.Single(t => t.FilePath == original.FilePath).Id;
-            Check(!db.Database.HasPendingModelChanges() && db.Database.GetAppliedMigrations().Count() == 6,
+            Check(!db.Database.HasPendingModelChanges() && !db.Database.GetPendingMigrations().Any(),
                 "Existing history databases migrate to refresh metadata without losing their schema");
         }
         var replacement = new Track { FilePath = other.FilePath, Title = "Relocated", Artist = "Artist", FileSize = 999,

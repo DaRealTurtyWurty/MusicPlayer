@@ -82,6 +82,7 @@ public partial class MainViewModel
 
     private void InitializeMusicBrowser(IReleaseTypeStore? releaseTypeStore)
     {
+        InitializeArtistIdentification();
         _releaseTypeStore = releaseTypeStore;
         try
         {
@@ -126,6 +127,7 @@ public partial class MainViewModel
         SelectedArtist = Artists.FirstOrDefault(g => g.Key == artistKey);
         SelectedAlbum = Albums.FirstOrDefault(g => g.Key == albumKey);
         SelectedBrowseTrack = BrowseTracks.FirstOrDefault(t => string.Equals(t.FilePath, selectedPath, StringComparison.OrdinalIgnoreCase));
+        IdentifyArtists();
         NotifyMusicBrowser();
     }
 
@@ -263,6 +265,10 @@ public partial class MainViewModel
     private void DisposeMusicBrowser()
     {
         _musicBrowserDisposed = true;
+        _artistIdentificationRetry?.Stop();
+        if (_artistIdentificationRetry is not null) _artistIdentificationRetry.Tick -= OnArtistIdentificationRetry;
+        _artistIdentificationCancellation?.Cancel();
+        _artistIdentificationCancellation?.Dispose();
         _musicBrowserRefresh?.Abort();
         Tracks.CollectionChanged -= OnMusicLibraryChanged;
     }

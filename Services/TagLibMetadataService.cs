@@ -23,6 +23,7 @@ public sealed class TagLibMetadataService : IMetadataService
                 : tagFile.Tag.Title,
 
             Artist = tagFile.Tag.FirstPerformer,
+            MusicBrainzArtistId = ReadArtistId(tagFile.Tag),
 
             Album = tagFile.Tag.Album,
             ReleaseTypeTag = ReadReleaseType(tagFile),
@@ -31,6 +32,17 @@ public sealed class TagLibMetadataService : IMetadataService
 
             ArtworkData = artwork?.Data.Data
         };
+    }
+
+    private static string? ReadArtistId(TagLib.Tag tag)
+    {
+        var value = tag.MusicBrainzArtistId;
+        if (MusicBrainzId.Normalize(value) is { } id) return id;
+        // Multi-value tags follow performer order; the library currently uses FirstPerformer.
+        var ids = value?.Split([';', '/', '\0'], StringSplitOptions.RemoveEmptyEntries);
+        return ids is { Length: > 1 } && ids.Length == tag.Performers.Length &&
+               ids.All(id => MusicBrainzId.Normalize(id) is not null)
+            ? MusicBrainzId.Normalize(ids[0]) : null;
     }
 
     private static string? ReadReleaseType(TagLib.File file)

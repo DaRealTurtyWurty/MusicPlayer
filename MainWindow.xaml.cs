@@ -134,6 +134,7 @@ public partial class MainWindow : Window
             libraryStore: musicStore,
             playbackSessionStore: musicStore,
             releaseTypeStore: musicStore,
+            artistIdentityService: new MusicBrainzArtistService(musicStore),
             libraryRefreshService: new LibraryRefreshService(metadataService),
             trackMatchPicker: new MusicPlayer.Views.TrackMatchPicker()
         );

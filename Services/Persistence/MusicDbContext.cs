@@ -6,6 +6,7 @@ public sealed class MusicDbContext(DbContextOptions<MusicDbContext> options) : D
 {
     public DbSet<StoredTrack> Tracks => Set<StoredTrack>();
     public DbSet<StoredReleaseType> ReleaseTypes => Set<StoredReleaseType>();
+    public DbSet<StoredArtistIdentity> ArtistIdentities => Set<StoredArtistIdentity>();
     public DbSet<StoredMusicFolder> MusicFolders => Set<StoredMusicFolder>();
     public DbSet<StoredPlaylist> Playlists => Set<StoredPlaylist>();
     public DbSet<StoredPlaylistEntry> PlaylistEntries => Set<StoredPlaylistEntry>();
@@ -18,6 +19,7 @@ public sealed class MusicDbContext(DbContextOptions<MusicDbContext> options) : D
     {
         modelBuilder.Entity<StoredMusicFolder>().HasKey(f => f.PathKey);
         modelBuilder.Entity<StoredReleaseType>().HasKey(r => r.ReleaseKey);
+        modelBuilder.Entity<StoredArtistIdentity>().HasKey(r => r.LookupKey);
         modelBuilder.Entity<StoredTrack>(entity =>
         {
             entity.HasKey(t => t.Id);
@@ -80,6 +82,8 @@ public sealed class StoredTrack
     public required string FilePath { get; set; }
     public required string Title { get; set; }
     public string? Artist { get; set; }
+    public string? MusicBrainzArtistId { get; set; }
+    public int MetadataVersion { get; set; }
     public string? Album { get; set; }
     public string? ReleaseTypeTag { get; set; }
     public long DurationTicks { get; set; }
@@ -87,6 +91,15 @@ public sealed class StoredTrack
     public long? LastWriteTimeUtcTicks { get; set; }
     public bool IsMissing { get; set; }
     public bool ExplicitlyAddedToLibrary { get; set; }
+}
+
+public sealed class StoredArtistIdentity
+{
+    public required string LookupKey { get; set; }
+    public MusicPlayer.Models.ArtistIdentityStatus Status { get; set; }
+    public string? MusicBrainzId { get; set; }
+    public string? Name { get; set; }
+    public long ExpiresAtUtcTicks { get; set; }
 }
 
 public sealed class StoredReleaseType

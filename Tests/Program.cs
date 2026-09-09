@@ -8,6 +8,24 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--artist-identity-live"])
+        {
+            DispatcherTest.Run(async () =>
+            {
+                var service = new MusicBrainzArtistService();
+                foreach (var name in new[] { "Radiohead", "AC/DC" })
+                {
+                    var identity = await service.IdentifyAsync(name, [], default);
+                    Check(identity.Status == ArtistIdentityStatus.Identified, $"Live MusicBrainz lookup: {name} -> {identity.MusicBrainzId} ({identity.Status})");
+                }
+            });
+            return;
+        }
+        if (args is ["--artist-identity-smoke"])
+        {
+            DispatcherTest.Run(CheckArtistIdentityAsync);
+            return;
+        }
         if (args is ["--gallery-performance"])
         {
             var galleryApp = new App();
@@ -65,6 +83,7 @@ internal static partial class Program
         }
         TemporaryTestDirectoryTests.Run();
         var player = new FakePlayer();
+        DispatcherTest.Run(CheckArtistIdentityAsync);
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player);
         var a = Track("A");
         var b = Track("B");
