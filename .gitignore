@@ -1,0 +1,47 @@
+# .NET build and publish output
+[Bb]in/
+[Oo]bj/
+/artifacts/
+
+# Visual Studio and Rider local settings
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.sln.iml
+
+# Test results, coverage, and logs
+[Tt]est[Rr]esults/
+coverage/
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+coverage.opencover.xml
+*.trx
+*.log
+
+# NuGet packages (restore from project references)
+*.nupkg
+*.snupkg
+
+# Local environment settings
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Local SQLite databases, including EF design-time databases
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# OS and temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.bak
+*~

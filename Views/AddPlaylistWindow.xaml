@@ -1,0 +1,58 @@
+<Window x:Class="MusicPlayer.Views.AddPlaylistWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="clr-namespace:MusicPlayer.Controls"
+        Title="Add playlist" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="PlaylistActionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="24">
+        <TextBlock Text="Add playlist" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock Text="Start fresh or import your music." Margin="0,8,0,20"
+                   Foreground="{StaticResource MutedBrush}" />
+        <Button x:Name="CreatePlaylistButton" Style="{StaticResource PlaylistActionButton}"
+                Command="{Binding CreatePlaylistCommand}" Click="PlaylistAction_Click"
+                AutomationProperties.Name="New playlist">
+            <DockPanel>
+                <icons:LucideIcon Geometry="{StaticResource IconListPlus}" Margin="0,0,14,0" />
+                <StackPanel>
+                    <TextBlock Text="New playlist" FontWeight="SemiBold" />
+                    <TextBlock Text="Create an empty playlist and add tracks." TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Button>
+        <Button Style="{StaticResource PlaylistActionButton}"
+                Command="{Binding ImportPlaylistFileCommand}" Click="PlaylistAction_Click"
+                AutomationProperties.Name="Import M3U8">
+            <DockPanel>
+                <icons:LucideIcon Geometry="{StaticResource IconFileMusic}" Margin="0,0,14,0" />
+                <StackPanel>
+                    <TextBlock Text="Import M3U8" FontWeight="SemiBold" />
+                    <TextBlock Text="Choose an M3U8 or M3U playlist file." TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Button>
+        <Button Style="{StaticResource PlaylistActionButton}"
+                Command="{Binding ImportPlaylistFolderCommand}" Click="PlaylistAction_Click"
+                AutomationProperties.Name="Import folder">
+            <DockPanel>
+                <icons:LucideIcon Geometry="{StaticResource IconFolderPlus}" Margin="0,0,14,0" />
+                <StackPanel>
+                    <TextBlock Text="Import folder" FontWeight="SemiBold" />
+                    <TextBlock Text="Add music from a folder and its subfolders." TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Button>
+        <Button Content="Cancel" IsCancel="True" HorizontalAlignment="Right" Margin="0,10,0,0" />
+    </StackPanel>
+</Window>

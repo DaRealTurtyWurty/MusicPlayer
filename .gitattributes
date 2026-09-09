@@ -1,0 +1,12 @@
+# Normalize text files in the repository and use native line endings on checkout.
+* text=auto
+
+# Keep native libraries and other binary assets unchanged.
+*.dll binary
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

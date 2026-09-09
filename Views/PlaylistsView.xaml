@@ -1,0 +1,332 @@
+<UserControl x:Class="MusicPlayer.Views.PlaylistsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:icons="clr-namespace:MusicPlayer.Controls"
+             xmlns:models="clr-namespace:MusicPlayer.Models">
+    <UserControl.Resources>
+        <ContextMenu x:Key="PlaylistTrackMenu" x:Shared="False"
+                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="Play _next" Command="{Binding PlacementTarget.Tag.PlayTrackNextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Add to _queue" Command="{Binding PlacementTarget.Tag.EnqueueTrackCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Add to _playlist…" Click="AddToPlaylist_Click" />
+            <Separator />
+            <MenuItem Header="Show _album" Command="{Binding PlacementTarget.Tag.ShowAlbumCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Show a_rtist" Command="{Binding PlacementTarget.Tag.ShowArtistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Open file _location" Command="{Binding PlacementTarget.Tag.OpenFileLocationCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="_Locate" Visibility="{Binding IsMissing, Converter={StaticResource BoolVisibility}}">
+                <MenuItem Header="Choose _file…" Command="{Binding PlacementTarget.Tag.LocateFileCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                          CommandParameter="{Binding}" />
+                <MenuItem Header="Search _folder…" Command="{Binding PlacementTarget.Tag.LocateFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                          CommandParameter="{Binding}" />
+            </MenuItem>
+        </ContextMenu>
+        <Style x:Key="PlaylistTile" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="172" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,16,16" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Margin="20,0,20,16">
+        <Grid x:Name="PlaylistGallery">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsPlaylistOpen}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="72" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Playlists" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Playlists.Count}" Foreground="{StaticResource MutedBrush}"
+                               Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Grid.Column="1" VerticalAlignment="Center" Click="AddPlaylist_Click"
+                        ToolTip="Create or import a playlist" AutomationProperties.Name="Add playlist">
+                    <StackPanel Orientation="Horizontal">
+                        <icons:LucideIcon Geometry="{StaticResource IconListPlus}" Margin="0,0,8,0" />
+                        <TextBlock Text="Add playlist" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+                <ItemsControl x:Name="PlaylistTiles" Grid.Row="1" Style="{StaticResource VirtualizedGallery}" ItemsSource="{Binding Playlists}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <icons:VirtualizingTilePanel ItemWidth="188" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource PlaylistTile}"
+                                    Command="{Binding DataContext.OpenPlaylistCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+                                <StackPanel>
+                                    <icons:PlaylistCover Tracks="{Binding CoverTracks}" Height="150" />
+                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                               Margin="0,12,0,0" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Name}" />
+                                    <TextBlock Text="{Binding Summary}" FontSize="12"
+                                               Foreground="{StaticResource MutedBrush}" Margin="0,4,0,2" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Playlists.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <icons:LucideIcon Geometry="{StaticResource IconListPlus}" Width="36" Height="36"
+                                  Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"
+                                  Margin="0,0,0,20" />
+                <TextBlock Text="Your playlists live here" FontSize="16" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <Button Content="Add playlist" Click="AddPlaylist_Click" HorizontalAlignment="Center"
+                        Margin="0,18,0,0" />
+            </StackPanel>
+        </Grid>
+        <Grid x:Name="PlaylistDetail" Visibility="{Binding IsPlaylistOpen, Converter={StaticResource BoolVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="64" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button Command="{Binding ClosePlaylistCommand}" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Style="{StaticResource QuietButton}" Padding="0,7,12,7">
+                    <StackPanel Orientation="Horizontal">
+                        <icons:LucideIcon Geometry="{StaticResource IconArrowDown}" RenderTransformOrigin="0.5,0.5"
+                                          Margin="0,0,8,0">
+                            <icons:LucideIcon.RenderTransform>
+                                <RotateTransform Angle="90" />
+                            </icons:LucideIcon.RenderTransform>
+                        </icons:LucideIcon>
+                        <TextBlock Text="All playlists" />
+                    </StackPanel>
+                </Button>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedPlaylistTrackIndex}" Value="-1">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Button Command="{Binding QueuePlaylistTrackCommand}" Style="{StaticResource IconButton}"
+                                ToolTip="Add track to queue" AutomationProperties.Name="Add playlist track to queue"
+                                Margin="0,0,6,0">
+                            <icons:LucideIcon Geometry="{StaticResource IconListPlus}" />
+                        </Button>
+                        <Button Style="{StaticResource IconButton}" Command="{Binding MovePlaylistTrackUpCommand}"
+                                ToolTip="Move track up" AutomationProperties.Name="Move playlist track up"
+                                Margin="0,0,6,0">
+                            <icons:LucideIcon Geometry="{StaticResource IconArrowUp}" />
+                        </Button>
+                        <Button Style="{StaticResource IconButton}" Command="{Binding MovePlaylistTrackDownCommand}"
+                                ToolTip="Move track down" AutomationProperties.Name="Move playlist track down"
+                                Margin="0,0,6,0">
+                            <icons:LucideIcon Geometry="{StaticResource IconArrowDown}" />
+                        </Button>
+                        <Button Style="{StaticResource IconButton}" Command="{Binding RemovePlaylistTrackCommand}"
+                                ToolTip="Remove from playlist" AutomationProperties.Name="Remove playlist track">
+                            <icons:LucideIcon Geometry="{StaticResource IconTrash}" />
+                        </Button>
+                    </StackPanel>
+                    <Button Content="Add tracks" Command="{Binding AddTracksToPlaylistCommand}" Margin="0,0,8,0" />
+                    <Button Style="{StaticResource IconButton}" Command="{Binding DeletePlaylistCommand}"
+                            ToolTip="Delete playlist" AutomationProperties.Name="Delete playlist">
+                        <icons:LucideIcon Geometry="{StaticResource IconTrash}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="44" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="136" />
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <icons:PlaylistCover x:Name="DetailCover" Tracks="{Binding SelectedPlaylist.CoverTracks}"
+                                         Height="136" />
+                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid HorizontalAlignment="Left">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRenamingPlaylist}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding SelectedPlaylist.Name}" FontSize="24" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedPlaylist.Name}"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Command="{Binding BeginRenamePlaylistCommand}"
+                                    Style="{StaticResource QuietButton}" Width="28" Height="28" Padding="0"
+                                    Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Rename playlist"
+                                    AutomationProperties.Name="Rename playlist">
+                                <icons:LucideIcon Width="16" Height="16"
+                                                  Geometry="M 4,16 L 16,4 Q 18,2 20,4 Q 22,6 20,8 L 8,20 L 3,21 Z M 14,6 L 18,10" />
+                            </Button>
+                        </Grid>
+                        <Grid Visibility="{Binding IsRenamingPlaylist, Converter={StaticResource BoolVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="PlaylistNameEditor"
+                                     Text="{Binding PlaylistName, UpdateSourceTrigger=PropertyChanged}" MaxLength="120"
+                                     AutomationProperties.Name="Playlist name" Margin="0,0,6,0"
+                                     IsVisibleChanged="PlaylistNameEditor_IsVisibleChanged">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Enter" Command="{Binding RenamePlaylistCommand}" />
+                                    <KeyBinding Key="Escape" Command="{Binding CancelRenamePlaylistCommand}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                            <Button Grid.Column="1" Content="Save" Command="{Binding RenamePlaylistCommand}" />
+                        </Grid>
+                        <TextBlock Grid.Row="1" Text="{Binding SelectedPlaylist.DurationSummary}"
+                                   Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" />
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,18,0,0">
+                            <Button Command="{Binding PlayPlaylistCommand}" Style="{StaticResource PrimaryButton}"
+                                    Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <icons:LucideIcon Geometry="{StaticResource IconPlay}" Margin="0,0,7,0" />
+                                    <TextBlock Text="Play"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding QueuePlaylistCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <icons:LucideIcon Geometry="{StaticResource IconListPlus}" Margin="0,0,7,0" />
+                                    <TextBlock Text="Add to queue" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+                <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1"
+                        Margin="0,0,0,4">
+                    <Grid Margin="9,0">
+                        <TextBlock Text="Title / Artist" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="48,0,0,0" />
+                        <TextBlock Text="Duration" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Grid Grid.Row="2" MinHeight="120">
+                    <ListBox x:Name="PlaylistTracks" ItemsSource="{Binding SelectedPlaylist.Tracks}"
+                             SelectedIndex="{Binding SelectedPlaylistTrackIndex, Mode=TwoWay}"
+                             MouseDoubleClick="PlaylistTracks_MouseDoubleClick"
+                             AutomationProperties.Name="Playlist tracks" ScrollViewer.CanContentScroll="True"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                             VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding PlayPlaylistTrackCommand}" />
+                            <KeyBinding Key="Delete" Command="{Binding RemovePlaylistTrackCommand}" />
+                        </ListBox.InputBindings>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="46">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="12" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="48" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Width="36" Height="36" Background="#292C30" ClipToBounds="True">
+                                        <icons:LucideIcon Geometry="{StaticResource IconMusic2}"
+                                                          Foreground="{StaticResource MutedBrush}"
+                                                          HorizontalAlignment="Center" />
+                                        <icons:TrackArtwork Track="{Binding}" Stretch="UniformToFill" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Title}" />
+                                        <TextBlock Text="Missing file — right-click to locate" Foreground="#FFB4AB" FontSize="10"
+                                                   Visibility="{Binding IsMissing, Converter={StaticResource BoolVisibility}}" />
+                                        <TextBlock Text="{Binding Artist, TargetNullValue=Unknown artist}"
+                                                   Foreground="{StaticResource MutedBrush}" FontSize="12"
+                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="3" Text="{Binding DurationText}"
+                                               Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" FontSize="12" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                <Setter Property="ContextMenu" Value="{StaticResource PlaylistTrackMenu}" />
+                                <EventSetter Event="ContextMenuOpening" Handler="Track_ContextMenuOpening" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="12">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedPlaylist.Tracks.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="No tracks yet" FontWeight="SemiBold" TextAlignment="Center" />
+                        <TextBlock Text="Use Add tracks to choose songs for this playlist."
+                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" TextAlignment="Center"
+                                   Margin="0,8,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
