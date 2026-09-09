@@ -8,6 +8,11 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--lyrics-smoke"])
+        {
+            CheckLyricsAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args is ["--artist-cache-smoke"])
         {
             DispatcherTest.Run(CheckArtistCachePriorityAsync);
@@ -115,6 +120,7 @@ internal static partial class Program
             return;
         }
         TemporaryTestDirectoryTests.Run();
+        CheckLyricsAsync().GetAwaiter().GetResult();
         var player = new FakePlayer();
         DispatcherTest.Run(CheckArtistIdentityAsync);
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player);
