@@ -1,55 +1,171 @@
 <UserControl x:Class="MusicPlayer.Views.NowPlayingView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:icons="clr-namespace:MusicPlayer.Controls">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="clr-namespace:MusicPlayer.Controls"
+             xmlns:models="clr-namespace:MusicPlayer.Models"
+             Loaded="View_Loaded" Unloaded="View_Unloaded" SizeChanged="View_SizeChanged"
+             DataContextChanged="View_DataContextChanged">
     <Grid Margin="20,0,20,20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="72" />
+            <RowDefinition Height="64" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Now Playing" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <Grid Grid.Row="1" VerticalAlignment="Center" MaxHeight="320">
+        <DockPanel LastChildFill="True">
+            <Button x:Name="LyricsToggle" DockPanel.Dock="Right" Content="{Binding Lyrics.ToggleLabel}"
+                    Command="{Binding Lyrics.ToggleCommand}" VerticalAlignment="Center"
+                    AutomationProperties.Name="{Binding Lyrics.ToggleLabel}" ToolTip="Show or hide local lyrics">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource QuietButton}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Lyrics.IsEnabled}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+            <TextBlock Text="Now Playing" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </DockPanel>
+        <Grid x:Name="ContentGrid" Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="24" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="InfoColumn" Width="*" />
+                <ColumnDefinition x:Name="LyricsColumn" Width="1.4*" />
             </Grid.ColumnDefinitions>
-            <Border Background="#25282D" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" MaxWidth="320"
-                    MaxHeight="320" Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}">
-                <Grid>
-                    <icons:LucideIcon Geometry="{StaticResource IconMusic2}" Width="64" Height="64"
-                                      Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
-                    <Image
-                        Source="{Binding CurrentTrack.ArtworkData, Converter={StaticResource ByteArrayToImageConverter}}"
-                        Stretch="Uniform" />
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="InfoRow" Height="*" />
+                <RowDefinition x:Name="LyricsRow" Height="0" />
+            </Grid.RowDefinitions>
+            <ScrollViewer x:Name="TrackScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid x:Name="TrackInfo" VerticalAlignment="Center" Margin="0,12,28,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="ArtworkColumn" Width="*" />
+                        <ColumnDefinition x:Name="DetailsColumn" Width="0" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border x:Name="Artwork" Background="#25282D" BorderBrush="{StaticResource LineBrush}"
+                            BorderThickness="1" CornerRadius="8" MaxWidth="300"
+                            Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}}">
+                        <Grid>
+                            <icons:LucideIcon Geometry="{StaticResource IconMusic2}" Width="48" Height="48"
+                                              Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                            <Image Source="{Binding CurrentTrack.ArtworkData, Converter={StaticResource ByteArrayToImageConverter}}"
+                                   Stretch="Uniform" />
+                        </Grid>
+                    </Border>
+                    <StackPanel x:Name="TrackDetails" Grid.Row="1" Margin="0,22,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentTrack.Title, FallbackValue='Nothing playing', TargetNullValue='Nothing playing'}"
+                                   FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding CurrentTrack.Artist}" FontSize="16" Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="AlbumLabel" Text="{Binding CurrentTrack.Album}" Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,16,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DurationLabel" Text="{Binding CurrentTrack.DurationText}" Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,6,0,0" />
+                        <Button x:Name="GoToLibrary" Content="Go to Library" Command="{Binding NavigateCommand}"
+                                CommandParameter="{x:Static models:AppPage.Library}" HorizontalAlignment="Left" Margin="0,18,0,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CurrentTrack}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+            <Border x:Name="LyricsPanel" Grid.Column="1" Background="{StaticResource PanelBrush}"
+                    CornerRadius="12" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                    Visibility="{Binding Lyrics.IsEnabled, Converter={StaticResource BoolVisibility}}">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Lyrics" FontSize="14" FontWeight="SemiBold" Margin="8,8,0,18" />
+                    <ScrollViewer x:Name="LyricsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" CanContentScroll="False"
+                                  PreviewMouseWheel="Lyrics_ManualScroll" PreviewMouseDown="Lyrics_PreviewMouseDown"
+                                  PreviewKeyDown="Lyrics_PreviewKeyDown"
+                                  Visibility="{Binding Lyrics.HasLyrics, Converter={StaticResource BoolVisibility}}">
+                        <ItemsControl x:Name="LyricsItems" ItemsSource="{Binding Lyrics.Lines}" Margin="0,30,0,100">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding Text}" Click="Lyric_Click"
+                                            Command="{Binding DataContext.Lyrics.SeekToLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" HorizontalContentAlignment="Stretch"
+                                            AutomationProperties.Name="{Binding SeekLabel}" ToolTip="Click to play from this line">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                <Setter Property="Background" Value="Transparent" />
+                                                <Setter Property="BorderBrush" Value="Transparent" />
+                                                <Setter Property="Padding" Value="14,14" />
+                                                <Setter Property="Margin" Value="0,2" />
+                                                <Setter Property="FontSize" Value="25" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                <Setter Property="Cursor" Value="Hand" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                                <TextBlock Text="{TemplateBinding Content}" TextWrapping="Wrap"
+                                                                           Foreground="{TemplateBinding Foreground}" />
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                                        <Setter Property="Background" Value="{StaticResource RaisedBrush}" />
+                                                    </DataTrigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel x:Name="LyricsStatus" Grid.Row="1" VerticalAlignment="Center" Margin="20">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Lyrics.HasLyrics}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="{Binding Lyrics.StatusTitle}" FontSize="22" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Text="{Binding Lyrics.StatusDetail}" Foreground="{StaticResource MutedBrush}"
+                                   TextWrapping="Wrap" Margin="0,12,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Margin="8,8,8,0">
+                        <TextBlock Text="{Binding Lyrics.Warning}" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{StaticResource MutedBrush}" />
+                        <Button x:Name="ResumeFollowingButton" Content="Resume following" Click="ResumeFollowing_Click"
+                                Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,8,0,0" />
+                    </StackPanel>
                 </Grid>
             </Border>
-            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                <TextBlock
-                    Text="{Binding CurrentTrack.Title, FallbackValue='Nothing playing', TargetNullValue='Nothing playing'}"
-                    FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding CurrentTrack.Artist, FallbackValue='', TargetNullValue='Unknown artist'}"
-                           FontSize="16" Foreground="{StaticResource MutedBrush}" Margin="0,10,0,0" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding CurrentTrack.Album}" Foreground="{StaticResource MutedBrush}"
-                           Margin="0,18,0,0" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding CurrentTrack.DurationText}" Foreground="{StaticResource MutedBrush}"
-                           Margin="0,8,0,0" />
-                <Button Content="Go to Library" Command="{Binding NavigateCommand}" HorizontalAlignment="Left"
-                        Margin="0,24,0,0">
-                    <Button.CommandParameter>
-                        <x:Static Member="models:AppPage.Library" xmlns:models="clr-namespace:MusicPlayer.Models" />
-                    </Button.CommandParameter>
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CurrentTrack}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-            </StackPanel>
         </Grid>
     </Grid>
 </UserControl>

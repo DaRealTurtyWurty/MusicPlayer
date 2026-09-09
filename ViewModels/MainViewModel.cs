@@ -17,6 +17,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly IFileLocationService _fileLocationService;
     private readonly Random _random;
     private readonly IUiPreferencesStore? _uiPreferencesStore;
+    public LyricsViewModel Lyrics { get; }
     private readonly Stack<(Track Track, bool Recycled)> _playbackHistory = new();
 
     [ObservableProperty]
@@ -146,7 +147,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         IReleaseTypeStore? releaseTypeStore = null,
         IFileLocationService? fileLocationService = null,
         IArtistIdentityService? artistIdentityService = null,
-        IArtistPhotoService? artistPhotoService = null)
+        IArtistPhotoService? artistPhotoService = null,
+        ILocalLyricsSource? lyricsSource = null)
     {
         _filePickerService = filePickerService;
         _folderPickerService = folderPickerService;
@@ -156,6 +158,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _fileLocationService = fileLocationService ?? new FileLocationService();
         _random = random ?? Random.Shared;
         _uiPreferencesStore = uiPreferencesStore;
+        Lyrics = new LyricsViewModel(lyricsSource ?? new LocalLyricsSource(), uiPreferencesStore);
+        Lyrics.SeekRequested += SeekToLyrics;
         (_volume, _volumeBeforeMute) = _uiPreferencesStore?.LoadVolume() ?? (100d, 100d);
         _audioPlayer.Volume = (float)(_volume / 100);
         isQueueOpen = _uiPreferencesStore?.LoadQueueOpen() ?? false;
@@ -552,14 +556,19 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnPositionSecondsChanged(double value)
     {
+        Lyrics.UpdatePosition(value);
         if (_updatingPosition)
             return;
 
         _audioPlayer.Seek(TimeSpan.FromSeconds(value));
     }
 
+    private void SeekToLyrics(double seconds) => PositionSeconds = Math.Clamp(seconds, 0, DurationSeconds);
+
     public void Dispose()
     {
+        Lyrics.SeekRequested -= SeekToLyrics;
+        Lyrics.Dispose();
         DisposeMusicBrowser();
         DisposeLibraryMaintenance();
         DisposePlaybackSession();

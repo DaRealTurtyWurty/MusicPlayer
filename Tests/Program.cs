@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--lyrics-view-smoke"])
+        {
+            var lyricsApp = new App();
+            lyricsApp.InitializeComponent();
+            lyricsApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(CheckLyricsViewAsync);
+            return;
+        }
         if (args is ["--lyrics-smoke"])
         {
             CheckLyricsAsync().GetAwaiter().GetResult();
@@ -121,6 +129,7 @@ internal static partial class Program
         }
         TemporaryTestDirectoryTests.Run();
         CheckLyricsAsync().GetAwaiter().GetResult();
+        DispatcherTest.Run(CheckLyricsViewModelAsync);
         var player = new FakePlayer();
         DispatcherTest.Run(CheckArtistIdentityAsync);
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player);

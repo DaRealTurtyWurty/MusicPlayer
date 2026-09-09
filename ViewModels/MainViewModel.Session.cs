@@ -43,6 +43,7 @@ public partial class MainViewModel
 
     partial void OnCurrentTrackChanged(Track? value)
     {
+        Lyrics.SetTrack(value, _audioPlayer.Duration);
         RefreshTimelineHistory();
         if (_canSaveSession) _sessionDirty = true;
     }

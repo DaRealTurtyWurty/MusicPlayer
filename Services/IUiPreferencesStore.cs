@@ -12,4 +12,6 @@ public interface IUiPreferencesStore
     void SaveVolume(double volume, double volumeBeforeMute);
     (bool ShuffleEnabled, PlaybackRepeatMode RepeatMode) LoadPlaybackModes();
     void SavePlaybackModes(bool shuffleEnabled, PlaybackRepeatMode repeatMode);
+    bool LoadLyricsEnabled();
+    void SaveLyricsEnabled(bool enabled);
 }

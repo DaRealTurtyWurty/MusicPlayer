@@ -45,9 +45,21 @@ and has the opposite sign. Keep negative effective timestamps when applying an
 offset rather than collapsing early lines onto zero. A final duration-derived
 end represents the audio track boundary, not the end of a sung word.
 
-The parsed model is independent of WPF. Playback clock integration, active-line
-selection and rendering are subsequent steps; this change does not automatically
-load or show lyrics in Now Playing.
+The parsed model is independent of WPF. `MainViewModel.Lyrics` owns a
+`LyricsViewModel` that loads on track changes, cancels stale loads, selects active
+lines and handles click-to-seek. It uses the existing playback position updates
+(250 ms); Enhanced LRC currently displays and highlights whole lines. A more
+precise audible playback clock and word-level animation remain future work.
+
+Now Playing shows lyrics beside artwork in wide windows and below compact track
+details in narrow windows. The header's Show lyrics / Hide lyrics button saves
+its state in `preferences.json` (on by default). Hiding cancels loading; showing
+reloads from disk, picking up edits or newly added sidecars. Missing,
+invalid and unreadable files have separate panel states without playback errors.
+Clicking a line seeks without changing play/pause state. Following scrolls to the
+active line; manual mouse/keyboard scrolling pauses following until Resume
+following or a lyric click. The view releases subscriptions and animations when
+unloaded, while playback and loaded lyrics stay in the shared view model.
 
 Run the focused checks with:
 
@@ -56,3 +68,13 @@ dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --lyrics-smoke
 ```
 
 The same checks also run in the default test suite.
+
+View-model and WPF rendering checks can be run with `--lyrics-view-smoke`.
+They render wide, narrow, hidden and empty-state previews under
+`artifacts/lyrics-previews`. If MusicPlayer is running, build into an isolated
+directory first:
+
+```powershell
+dotnet build Tests/MusicPlayer.QueueTests.csproj --artifacts-path artifacts/lyrics-view
+dotnet artifacts/lyrics-view/bin/MusicPlayer.QueueTests/debug_win-x64/MusicPlayer.QueueTests.dll --lyrics-view-smoke
+```

@@ -4,6 +4,11 @@
 `PlaylistsView`, and `NowPlayingView`; playback stays in the shared `MainViewModel` so changing pages does not interrupt
 it.
 
+Now Playing displays local LRC lyrics with a persistent show/hide toggle,
+line highlighting, click-to-seek and automatic following. Narrow layouts place
+lyrics below compact track details. Turning lyrics back on rereads the matching sidecar; see
+`../LYRICS.md` for discovery rules, timing behavior and focused tests.
+
 To add a page, add a value to `Models/AppPage.cs`, create a user control here, and register its data template,
 content-host trigger, and navigation button in `MainWindow.xaml`. Page-specific commands and state can live in a
 separate partial view-model file, as playlist and navigation behavior does in `MainViewModel.Navigation.cs`.

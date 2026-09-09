@@ -12,6 +12,10 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
 
     public bool LoadQueueOpen() => Load().IsQueueOpen;
 
+    public bool LoadLyricsEnabled() => Load().LyricsEnabled;
+
+    public void SaveLyricsEnabled(bool enabled) => Save(Load() with { LyricsEnabled = enabled });
+
     public AppPage LoadSelectedPage()
     {
         var page = Load().SelectedPage;
@@ -91,5 +95,6 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
 
     private sealed record Preferences(bool IsQueueOpen = false, AppPage SelectedPage = AppPage.Library,
         double Volume = 100, double VolumeBeforeMute = 100,
-        bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off);
+        bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off,
+        bool LyricsEnabled = true);
 }
