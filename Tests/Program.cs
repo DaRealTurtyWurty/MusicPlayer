@@ -8,6 +8,28 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--discord-artwork-recovery-smoke"])
+        {
+            DispatcherTest.Run(CheckDiscordArtworkRecoveryAsync);
+            return;
+        }
+        if (args is ["--album-artwork-smoke"])
+        {
+            DispatcherTest.Run(CheckAlbumArtworkAsync);
+            DispatcherTest.Run(CheckDiscordArtworkBindingAsync);
+            return;
+        }
+        if (args is ["--discord-smoke"])
+        {
+            DispatcherTest.Run(CheckDiscordPresenceAsync);
+            DispatcherTest.Run(CheckDiscordRpcTransportAsync);
+            DispatcherTest.Run(CheckDiscordArtworkRecoveryAsync);
+            var discordApp = new App();
+            discordApp.InitializeComponent();
+            discordApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckDiscordSettingsLayout();
+            return;
+        }
         if (args is ["--embedded-lyrics-smoke"])
         {
             var embeddedApp = new App();
@@ -231,6 +253,11 @@ internal static partial class Program
         CheckPrevious();
         CheckVolumePersistence();
         CheckPlaybackModePersistence();
+        DispatcherTest.Run(CheckDiscordPresenceAsync);
+        DispatcherTest.Run(CheckDiscordRpcTransportAsync);
+        DispatcherTest.Run(CheckDiscordArtworkRecoveryAsync);
+        DispatcherTest.Run(CheckAlbumArtworkAsync);
+        DispatcherTest.Run(CheckDiscordArtworkBindingAsync);
         DispatcherTest.Run(CheckSystemMediaControlsAsync);
         CheckNativeSystemMediaControls();
         DispatcherTest.Run(CheckPlaybackSessionPersistenceAsync);
@@ -244,6 +271,7 @@ internal static partial class Program
         var app = new App();
         app.InitializeComponent();
         app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+        CheckDiscordSettingsLayout();
         DispatcherTest.Run(CheckArtistPhotosAsync);
         DispatcherTest.Run(CheckReleaseTypesAsync);
         DispatcherTest.Run(CheckMusicBrowserAsync);

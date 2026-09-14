@@ -16,6 +16,7 @@ internal static class MusicMetadataHttp
         public DateTimeOffset NextRequest;
     }
     private static readonly HostLimit MusicBrainz = new(1100);
+    private static readonly HostLimit CoverArtArchive = new(1100);
     private static readonly HostLimit Wikimedia = new(400);
     private static readonly HostLimit Fanart = new(250);
     private static readonly HostLimit AudioDb = new(2100); // Free API: at most 30 requests per minute.
@@ -29,6 +30,7 @@ internal static class MusicMetadataHttp
     internal static async Task<byte[]> BytesAsync(HttpClient client, Uri uri, int limit, CancellationToken token, string? apiKey = null)
     {
         var host = uri.Host == "musicbrainz.org" ? MusicBrainz
+            : uri.Host == "coverartarchive.org" ? CoverArtArchive
             : uri.Host == "api.deezer.com" ? Deezer
             : uri.Host is "cdn-images.dzcdn.net" or "e-cdns-images.dzcdn.net" ? DeezerImages
             : uri.Host is "www.theaudiodb.com" or "r2.theaudiodb.com"

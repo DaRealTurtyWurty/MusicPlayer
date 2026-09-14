@@ -14,4 +14,6 @@ public interface IUiPreferencesStore
     void SavePlaybackModes(bool shuffleEnabled, PlaybackRepeatMode repeatMode);
     bool LoadLyricsEnabled();
     void SaveLyricsEnabled(bool enabled);
+    DiscordPresenceOptions LoadDiscordPresence();
+    void SaveDiscordPresence(DiscordPresenceOptions options);
 }

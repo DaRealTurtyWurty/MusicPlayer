@@ -128,6 +128,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly DispatcherTimer _positionTimer;
     private bool _updatingPosition;
+    public TimeSpan PlaybackPosition => _audioPlayer.Position;
+    public event EventHandler? PlaybackSeeked;
 
     public MainViewModel(
         IFilePickerService filePickerService,
@@ -158,6 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _fileLocationService = fileLocationService ?? new FileLocationService();
         _random = random ?? Random.Shared;
         _uiPreferencesStore = uiPreferencesStore;
+        _discordPresenceOptions = _uiPreferencesStore?.LoadDiscordPresence() ?? new();
         Lyrics = new LyricsViewModel(lyricsSource ?? new LocalLyricsSource(), uiPreferencesStore);
         Lyrics.SeekRequested += SeekToLyrics;
         (_volume, _volumeBeforeMute) = _uiPreferencesStore?.LoadVolume() ?? (100d, 100d);
@@ -562,6 +565,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _audioPlayer.Seek(TimeSpan.FromSeconds(value));
         RefreshLyricsPosition();
+        PlaybackSeeked?.Invoke(this, EventArgs.Empty);
     }
 
     public void RefreshLyricsPosition() => Lyrics.UpdatePosition(_audioPlayer.PresentationPosition.TotalSeconds);

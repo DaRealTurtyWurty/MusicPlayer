@@ -22,7 +22,9 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
             {
                 FilePath = t.FilePath, Title = t.Title ?? Path.GetFileNameWithoutExtension(t.FilePath),
                 Artist = t.Artist, Album = t.Album, Duration = TimeSpan.FromTicks(t.DurationTicks),
-                MusicBrainzArtistId = t.MusicBrainzArtistId, MetadataVersion = t.MetadataVersion
+                MusicBrainzArtistId = t.MusicBrainzArtistId, MetadataVersion = t.MetadataVersion,
+                AlbumArtist = t.AlbumArtist, MusicBrainzReleaseId = t.MusicBrainzReleaseId,
+                MusicBrainzReleaseGroupId = t.MusicBrainzReleaseGroupId
             };
         }).ToArray();
     }
@@ -30,7 +32,7 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
     public void Save(IEnumerable<Track> tracks)
     {
         var saved = tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks,
-            t.MusicBrainzArtistId, t.MetadataVersion));
+            t.MusicBrainzArtistId, t.MetadataVersion, t.AlbumArtist, t.MusicBrainzReleaseId, t.MusicBrainzReleaseGroupId));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
         var temporaryPath = _path + ".tmp";
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(saved));
@@ -38,5 +40,6 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
     }
 
     private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks,
-        string? MusicBrainzArtistId = null, int MetadataVersion = 0);
+        string? MusicBrainzArtistId = null, int MetadataVersion = 0, string? AlbumArtist = null,
+        string? MusicBrainzReleaseId = null, string? MusicBrainzReleaseGroupId = null);
 }

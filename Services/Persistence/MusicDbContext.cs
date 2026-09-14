@@ -85,6 +85,9 @@ public sealed class StoredTrack
     public string? MusicBrainzArtistId { get; set; }
     public int MetadataVersion { get; set; }
     public string? Album { get; set; }
+    public string? AlbumArtist { get; set; }
+    public string? MusicBrainzReleaseId { get; set; }
+    public string? MusicBrainzReleaseGroupId { get; set; }
     public string? ReleaseTypeTag { get; set; }
     public long DurationTicks { get; set; }
     public long? FileSize { get; set; }

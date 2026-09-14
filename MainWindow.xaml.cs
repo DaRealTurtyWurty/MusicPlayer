@@ -13,9 +13,16 @@ public partial class MainWindow : Window
     private IInputElement? _focusBeforeImport;
     private SystemMediaControlsBinding? _mediaControls;
     private TaskbarPreviewService? _taskbarPreview;
+    private DiscordPresenceBinding? _discordPresence;
     private IInputElement? _focusBeforeClearQueue;
     private IInputElement? _focusBeforeDeletePlaylist;
     private readonly DispatcherTimer _volumeCloseTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
+
+    private void DiscordSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+            new Views.DiscordSettingsWindow(viewModel) { Owner = this }.ShowDialog();
+    }
 
     private void VolumeControl_MouseEnter(object sender, MouseEventArgs e) => OpenVolumePopup();
 
@@ -145,6 +152,8 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
         if (DataContext is not MainViewModel viewModel) return;
+        _discordPresence = new DiscordPresenceBinding(viewModel, Dispatcher,
+            artworkResolver: new AlbumArtworkUrlResolver());
         try
         {
             _taskbarPreview = new TaskbarPreviewService(this, viewModel);
@@ -166,6 +175,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _discordPresence?.Dispose();
         _taskbarPreview?.Dispose();
         _mediaControls?.Dispose();
         CloseVolumePopup();

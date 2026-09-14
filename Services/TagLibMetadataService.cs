@@ -26,6 +26,9 @@ public sealed class TagLibMetadataService : IMetadataService
             MusicBrainzArtistId = ReadArtistId(tagFile.Tag),
 
             Album = tagFile.Tag.Album,
+            AlbumArtist = string.Join("; ", tagFile.Tag.AlbumArtists),
+            MusicBrainzReleaseId = MusicBrainzId.Normalize(tagFile.Tag.MusicBrainzReleaseId),
+            MusicBrainzReleaseGroupId = MusicBrainzId.Normalize(tagFile.Tag.MusicBrainzReleaseGroupId),
             ReleaseTypeTag = ReadReleaseType(tagFile),
 
             Duration = tagFile.Properties.Duration,
