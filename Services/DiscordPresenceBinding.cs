@@ -142,14 +142,13 @@ public sealed class DiscordPresenceBinding : IDisposable
         var track = _viewModel.CurrentTrack!;
         if (!_timelineDirty && _lastPresence is not null)
             return _lastPresence with { ArtworkUrl = _artworkUrl, ArtworkText = track.Album };
-        var metadata = string.Join(" — ", new[] { track.Artist, track.Album }.Where(s => !string.IsNullOrWhiteSpace(s)));
         var duration = _viewModel.DurationSeconds;
         var position = _viewModel.PlaybackPosition.TotalSeconds;
         // Missing/invalid duration must not produce an invalid or already expired timer.
         if (!double.IsFinite(duration) || duration <= 0 || !double.IsFinite(position) || position >= duration)
-            return new(track.Title, metadata, null, null, _artworkUrl, track.Album);
+            return new(track.Title, track.Artist, null, null, _artworkUrl, track.Album);
         var start = now.AddSeconds(-Math.Clamp(position, 0, duration));
-        return new(track.Title, metadata, start, start.AddSeconds(duration), _artworkUrl, track.Album);
+        return new(track.Title, track.Artist, start, start.AddSeconds(duration), _artworkUrl, track.Album);
     }
 
     private void UpdateArtwork(bool playing, DateTimeOffset now)

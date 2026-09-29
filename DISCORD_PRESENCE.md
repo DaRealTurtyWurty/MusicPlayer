@@ -6,8 +6,9 @@ override. Sharing is disabled by default.
 Only an application ID is needed; do not supply a bot token or client secret.
 The Discord desktop client must be running with activity sharing enabled.
 
-While playing, the app publishes a Listening activity with the song title,
-artist and album, plus timestamps based on the audio player's actual position.
+While playing, the app displays **Listening to [artist]** in Discord's status text,
+with the song title in the activity details and album in the cover tooltip. Missing
+artist metadata displays **Unknown artist**. Timestamps follow the audio player's actual position.
 Pause, stop, queue exhaustion, failed track loads, disabling presence, and
 closing the app clear the activity. Resume, seek and repeat recalculate the
 timestamps. Local file paths, audio files and embedded artwork are never uploaded.

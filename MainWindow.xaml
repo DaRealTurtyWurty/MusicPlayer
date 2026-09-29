@@ -363,7 +363,10 @@
                                    VerticalAlignment="Center" />
                         <Slider x:Name="SeekSlider" Grid.Column="1" Minimum="0" Maximum="{Binding DurationSeconds}"
                                 Value="{Binding PositionSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                IsMoveToPointEnabled="True" AutomationProperties.Name="Playback position">
+                                AutomationProperties.Name="Playback position"
+                                PreviewMouseLeftButtonDown="SeekSlider_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="SeekSlider_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="SeekSlider_PreviewMouseLeftButtonUp">
                             <Slider.Style>
                                 <Style TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
                                     <Style.Triggers>

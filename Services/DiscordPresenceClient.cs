@@ -103,8 +103,9 @@ public sealed class DiscordPresenceClient : IDiscordPresenceClient
     internal static RichPresence CreateActivity(DiscordPresence presence) => new()
     {
         Type = ActivityType.Listening,
+        StatusDisplay = StatusDisplayType.State,
         Details = LimitText(presence.Title) ?? "Unknown track",
-        State = LimitText(presence.ArtistAndAlbum),
+        State = LimitText(presence.Artist) ?? "Unknown artist",
         Assets = AlbumArtworkUrlResolver.IsCoverUrl(presence.ArtworkUrl) ? new Assets
         {
             LargeImageKey = presence.ArtworkUrl,

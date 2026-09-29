@@ -1,6 +1,6 @@
 namespace MusicPlayer.Services;
 
-public sealed record DiscordPresence(string Title, string? ArtistAndAlbum,
+public sealed record DiscordPresence(string Title, string? Artist,
     DateTimeOffset? Start, DateTimeOffset? End, string? ArtworkUrl = null, string? ArtworkText = null);
 
 /// <summary>Used on the WPF dispatcher; network I/O runs on the RPC client's worker.</summary>

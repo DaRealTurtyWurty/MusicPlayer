@@ -14,7 +14,7 @@ internal static partial class Program
         client.StatusChanged += _ => callbackThread = Environment.CurrentManagedThreadId;
         var now = DateTimeOffset.UtcNow;
         client.Update(new("Old offline song", null, now, now.AddMinutes(3)));
-        client.Update(new("Latest song", "Artist — Album", now, now.AddMinutes(3), CoverUrl("release", CoverRelease), "Album"));
+        client.Update(new("Latest song", "Radiohead", now, now.AddMinutes(3), CoverUrl("release", CoverRelease), "Album"));
         client.Initialize();
         async Task WaitFor(Func<bool> predicate, string message)
         {
@@ -31,8 +31,9 @@ internal static partial class Program
         await WaitFor(() => pipe.Activities.Count > 0, "Real RPC wrapper completes a simulated Discord handshake");
         var activity = pipe.Activities.Single();
         Check((string?)activity["details"] == "Latest song" && (int?)activity["type"] == 2 &&
-              (string?)activity["state"] == "Artist — Album" && activity["timestamps"]?["end"] is not null,
-            "RPC wire payload contains only the latest song, listening type and timestamps");
+              (string?)activity["state"] == "Radiohead" && (int?)activity["status_display_type"] == 1 &&
+              activity["timestamps"]?["end"] is not null,
+            "RPC wire payload displays Listening to Radiohead with the latest song and timestamps");
         Check(callbackThread == Environment.CurrentManagedThreadId, "Real RPC callbacks execute on the dispatcher thread");
         Check((string?)activity["assets"]?["large_image"] == CoverUrl("release", CoverRelease) &&
               (string?)activity["assets"]?["large_text"] == "Album", "RPC wire payload sends the public album cover and tooltip");

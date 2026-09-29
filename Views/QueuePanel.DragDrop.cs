@@ -101,7 +101,7 @@ public partial class QueuePanel
         }
 
         // Empty space below the last row appends; gaps above/within history are not drop targets.
-        if (QueueList.ItemContainerGenerator.ContainerFromIndex(QueueList.Items.Count - 1) is ListBoxItem last)
+        if (QueueList.ItemContainerGenerator.ContainerFromIndex(vm.QueueTimeline.Count - 1) is ListBoxItem last)
         {
             var bounds = last.TransformToAncestor(QueueList).TransformBounds(new Rect(last.RenderSize));
             if (position.Y >= bounds.Bottom) return (vm.Queue.Count, bounds.Bottom);

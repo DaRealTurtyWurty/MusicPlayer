@@ -8,6 +8,17 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--queue-smoke"])
+        {
+            var queueApp = new App();
+            queueApp.InitializeComponent();
+            queueApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckQueueHistory();
+            CheckClearQueueConfirmation();
+            CheckQueueInteractions();
+            CheckQueuePlaybackScrolling();
+            return;
+        }
         if (args is ["--discord-artwork-recovery-smoke"])
         {
             DispatcherTest.Run(CheckDiscordArtworkRecoveryAsync);
@@ -285,6 +296,7 @@ internal static partial class Program
         CheckClearQueueConfirmation();
         CheckDeletePlaylistConfirmation();
         CheckQueueInteractions();
+        CheckQueuePlaybackScrolling();
         CheckTrackMenus();
         CheckTrackActions();
         CheckLargePlaylistLayout();

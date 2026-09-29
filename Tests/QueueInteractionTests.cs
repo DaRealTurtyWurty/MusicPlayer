@@ -8,6 +8,80 @@ using MusicPlayer.Views;
 
 internal static partial class Program
 {
+    private static void CheckQueuePlaybackScrolling()
+    {
+        var player = new FakePlayer();
+        using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player);
+        vm.SelectedTrack = Track("First song");
+        vm.PlaySelectedTrackCommand.Execute(null);
+        for (var i = 0; i < 30; i++) vm.Queue.Add(Track($"Queued song {i}"));
+
+        var panel = new QueuePanel { DataContext = vm };
+        var window = new Window
+        {
+            Content = panel, Width = 296, Height = 560,
+            ShowActivated = false, ShowInTaskbar = false, Left = -10000, Top = -10000
+        };
+        window.Show();
+        void Layout()
+        {
+            window.UpdateLayout();
+            Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            window.UpdateLayout();
+        }
+        Layout();
+        var list = (ListBox)panel.FindName("QueueList");
+        var scroll = Descendants(list).OfType<ScrollViewer>().First();
+        Check(scroll.VerticalOffset == 0, "Playback without history starts at the top of the queue");
+
+        void CheckCurrentPosition(string message)
+        {
+            Layout();
+            var currentIndex = vm.QueueTimeline.ToList().FindIndex(entry => entry.IsCurrent);
+            var previous = list.ItemContainerGenerator.ContainerFromIndex(currentIndex - 1) as ListBoxItem;
+            var current = list.ItemContainerGenerator.ContainerFromIndex(currentIndex) as ListBoxItem;
+            Check(previous is not null && current is not null &&
+                  Math.Abs(previous.TranslatePoint(new Point(), list).Y) < 1 &&
+                  Math.Abs(current.TranslatePoint(new Point(), list).Y - previous.ActualHeight) < 1,
+                message);
+        }
+
+        for (var i = 0; i < 12; i++)
+        {
+            player.End();
+            CheckCurrentPosition("Advancing playback keeps exactly one previous song above the current song");
+        }
+        vm.PreviousCommand.Execute(null);
+        CheckCurrentPosition("Previous also anchors the current song below one history row");
+
+        scroll.ScrollToTop();
+        Layout();
+        panel.Visibility = Visibility.Collapsed;
+        player.End();
+        Layout();
+        panel.Visibility = Visibility.Visible;
+        CheckCurrentPosition("Reopening the queue restores the current song near the top");
+
+        scroll.ScrollToTop();
+        Layout();
+        Check(scroll.VerticalOffset == 0, "History remains available through manual scrolling");
+        while (vm.Queue.Count > 0)
+        {
+            player.End();
+            CheckCurrentPosition("The current song stays in the second row through the end of the queue");
+        }
+        window.Height = 720;
+        CheckCurrentPosition("Resizing preserves the current song's position at the end of the queue");
+        scroll.ScrollToTop();
+        Layout();
+        panel.Visibility = Visibility.Collapsed;
+        Layout();
+        panel.Visibility = Visibility.Visible;
+        CheckCurrentPosition("Reopening can find the final song from distant, virtualized history");
+        panel.DataContext = null;
+        window.Close();
+    }
+
     private static void CheckQueueInteractions()
     {
         var player = new FakePlayer();

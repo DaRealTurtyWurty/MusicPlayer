@@ -52,7 +52,8 @@ The queue panel displays played songs in playback order, a highlighted current s
 represents a separate occurrence, so duplicate songs remain independently selectable. History rows can be replayed;
 Clear, removal, and reordering apply to upcoming songs. Previous navigates the same playback history, and starting a
 new Play all or playlist session resets it. History is saved with the playback session, including repeat-all recycling
-state, and restored on restart. The queue scrolls to the current song when opened or when playback advances.
+state, and restored on restart. When opened or when playback advances, the queue scrolls with the most recently
+played song above the current song, keeping upcoming songs in view.
 Upcoming rows can be dragged to reorder, with an insertion line and scrolling near the list edges. Right-click a row
 for Play, Remove, Move up, or Move down; Enter, Delete, Alt+Up, and Alt+Down remain available from the keyboard.
 Clear opens a confirmation modal showing the current upcoming-song count. Cancel or Escape leaves the queue intact;

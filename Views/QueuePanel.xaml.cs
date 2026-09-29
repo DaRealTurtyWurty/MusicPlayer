@@ -20,6 +20,7 @@ public partial class QueuePanel : UserControl
         Unloaded += (_, _) => DetachViewModel();
         DataContextChanged += (_, _) => { if (IsLoaded) AttachViewModel(); };
         IsVisibleChanged += (_, _) => { if (IsVisible) ScrollToCurrent(); };
+        QueueList.SizeChanged += (_, _) => ScrollToCurrent();
     }
 
     private void AttachViewModel()
@@ -47,7 +48,21 @@ public partial class QueuePanel : UserControl
         {
             if (IsVisible && DataContext is MainViewModel vm &&
                 vm.QueueTimeline.FirstOrDefault(entry => entry.IsCurrent) is { } current)
-                QueueList.ScrollIntoView(current);
+            {
+                var currentIndex = vm.QueueTimeline.IndexOf(current);
+                // Leave room below the last song so the scroll limit doesn't push it down again.
+                QueueTailSpace.Height = QueueList.ActualHeight;
+                QueueList.UpdateLayout();
+                var anchorIndex = Math.Max(0, currentIndex - 1);
+                QueueList.ScrollIntoView(vm.QueueTimeline[anchorIndex]);
+                QueueList.UpdateLayout();
+                // ScrollIntoView only reveals the row. Align the previous song with the top
+                // after its container is realized, keeping the current song directly below it.
+                if (FindScrollViewer(QueueList) is { } scroll &&
+                    QueueList.ItemContainerGenerator.ContainerFromIndex(anchorIndex) is ListBoxItem row)
+                    scroll.ScrollToVerticalOffset(scroll.VerticalOffset + row.TranslatePoint(new Point(), QueueList).Y);
+            }
+            else QueueTailSpace.Height = 0;
         });
     }
 

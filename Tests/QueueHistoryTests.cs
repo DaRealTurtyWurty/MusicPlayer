@@ -58,7 +58,7 @@ internal static partial class Program
         }
         Layout();
         var list = Descendants(content).OfType<ListBox>().Single(l => l.Name == "QueueList");
-        Check(list.Items.Count == 4 && Descendants(list).OfType<TextBlock>().Count(t => t.Text == "Current song") == 1,
+        Check(list.Items.OfType<QueueEntry>().Count() == 4 && Descendants(list).OfType<TextBlock>().Count(t => t.Text == "Current song") == 1,
             "Queue UI renders history, one labeled current song and upcoming tracks");
         list.SelectedIndex = 3;
         Check(vm.SelectedQueueIndex == 1 && vm.SelectedQueueEntry?.Track == c,
@@ -79,7 +79,7 @@ internal static partial class Program
         vm.ClearQueueCommand.Execute(null);
         vm.ConfirmClearQueueCommand.Execute(null);
         Layout();
-        Check(list.Items.Count == 2 && !vm.IsQueueTimelineEmpty &&
+        Check(list.Items.OfType<QueueEntry>().Count() == 2 && !vm.IsQueueTimelineEmpty &&
               Descendants(content).OfType<TextBlock>().Single(t => t.Text == "Queue is empty").Visibility == Visibility.Collapsed,
             "Clear leaves history and current visible without displaying an empty queue message");
         vm.PlayAllCommand.Execute(null);

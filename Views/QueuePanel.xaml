@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MusicPlayer.Views.QueuePanel">
     <UserControl.Resources>
+        <CollectionViewSource x:Key="QueueTimelineSource" Source="{Binding QueueTimeline}" />
         <ContextMenu x:Key="QueueContextMenu" x:Shared="False" FontSize="12" FontWeight="Normal"
                      DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="_Play" Command="{Binding PlayQueueEntryCommand}" InputGestureText="Enter" />
@@ -54,13 +55,21 @@
                            Margin="9,0" />
             </Border>
             <Grid Grid.Row="2">
-                <ListBox x:Name="QueueList" ItemsSource="{Binding QueueTimeline}"
+                <ListBox x:Name="QueueList"
+                         VirtualizingPanel.ScrollUnit="Pixel"
                          SelectedItem="{Binding SelectedQueueEntry, Mode=TwoWay}" SelectionMode="Single"
                          MouseDoubleClick="QueueList_MouseDoubleClick"
                          AllowDrop="True" PreviewMouseLeftButtonDown="QueueList_PreviewMouseLeftButtonDown"
                          PreviewMouseMove="QueueList_PreviewMouseMove" PreviewMouseLeftButtonUp="QueueList_PreviewMouseLeftButtonUp"
                          DragOver="QueueList_DragOver" DragLeave="QueueList_DragLeave" Drop="QueueList_Drop"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    <ListBox.ItemsSource>
+                        <CompositeCollection>
+                            <CollectionContainer Collection="{Binding Source={StaticResource QueueTimelineSource}}" />
+                            <ListBoxItem x:Name="QueueTailSpace" Height="0" Padding="0" Margin="0"
+                                         Focusable="False" IsHitTestVisible="False" IsEnabled="False" />
+                        </CompositeCollection>
+                    </ListBox.ItemsSource>
                     <ListBox.InputBindings>
                         <KeyBinding Key="Delete" Command="{Binding RemoveFromQueueCommand}" />
                         <KeyBinding Key="Enter" Command="{Binding PlayQueueEntryCommand}" />

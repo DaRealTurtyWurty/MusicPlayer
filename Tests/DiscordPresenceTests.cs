@@ -71,7 +71,7 @@ internal static partial class Program
         first.ConnectOnPump = true;
         await Pump();
         var presence = first.Published.Single()!;
-        Check(presence.Title == "Song A" && presence.ArtistAndAlbum == "Artist A — Album A" &&
+        Check(presence.Title == "Song A" && presence.Artist == "Artist A" &&
               presence.Start == clock.GetUtcNow().AddSeconds(-42) &&
               presence.End == clock.GetUtcNow().AddSeconds(138),
             "Connection publishes only the latest song with audio position and actual duration");
@@ -109,7 +109,7 @@ internal static partial class Program
         vm.SelectedTrack = Track("Final");
         vm.PlaySelectedTrackCommand.Execute(null);
         await Drain();
-        Check(first.Published[^1] is { Title: "Final", ArtistAndAlbum: "" },
+        Check(first.Published[^1] is { Title: "Final" } final && string.IsNullOrWhiteSpace(final.Artist),
             "Rapid track changes coalesce and clear missing metadata");
 
         first.Disconnect();
@@ -183,11 +183,12 @@ internal static partial class Program
 
         var activity = DiscordPresenceClient.CreateActivity(new(string.Concat(Enumerable.Repeat("🎵", 80)),
             "Artist\nAlbum", clock.GetUtcNow(), clock.GetUtcNow().AddMinutes(3)));
-        Check(activity.Type == DiscordRPC.ActivityType.Listening && Encoding.UTF8.GetByteCount(activity.Details) == 128 &&
+        Check(activity.Type == DiscordRPC.ActivityType.Listening && activity.StatusDisplay == DiscordRPC.StatusDisplayType.State &&
+              Encoding.UTF8.GetByteCount(activity.Details) == 128 &&
               !activity.Details.Contains('\uFFFD') && activity.State == "Artist Album" && activity.Assets is null &&
               activity.Timestamps.End > activity.Timestamps.Start, "RPC payload has listening type, safe Unicode text and timestamps without artwork");
         activity = DiscordPresenceClient.CreateActivity(new(" ", null, null, null));
-        Check(activity.Details == "Unknown track" && activity.State is null && activity.Timestamps is null,
+        Check(activity.Details == "Unknown track" && activity.State == "Unknown artist" && activity.Timestamps is null,
             "Empty metadata and unknown duration create a valid text-only payload");
     }
 
