@@ -8,6 +8,11 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--audio-file-profile", var audioPath])
+        {
+            CheckAudioFileProfile(audioPath);
+            return;
+        }
         if (args is ["--crossfade-smoke"])
         {
             var crossfadeApp = new App(suppressStartup: true);

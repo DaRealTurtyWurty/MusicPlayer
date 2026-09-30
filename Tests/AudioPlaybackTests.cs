@@ -10,8 +10,34 @@ internal static partial class Program
     private static readonly string[] AudioFormats = ["wav", "mp3", "flac", "m4a", "ogg"];
     private static string AudioFixture(string extension) => Path.Combine(AppContext.BaseDirectory, "Fixtures", "Playback", "silence." + extension);
 
+    private static void CheckAudioFileProfile(string path)
+    {
+        using var reader = NAudioPlayer.CreateReader(path);
+        var source = new GaplessSampleProvider(new ReplayGainSampleProvider(reader.ToSampleProvider(),
+            ReplayGainMetadata.Read(path), () => new ReplayGainOptions()), reader.TotalTime, 5);
+        var buffer = new float[Math.Max(1, reader.WaveFormat.SampleRate / 50) * reader.WaveFormat.Channels];
+        var samples = 0L;
+        var slowestMs = 0d;
+        var slowestPosition = 0d;
+        var lateReads = 0;
+        while (true)
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var read = source.Read(buffer);
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var position = samples / (double)(source.WaveFormat.SampleRate * source.WaveFormat.Channels);
+            if (elapsed > slowestMs) { slowestMs = elapsed; slowestPosition = position; }
+            if (elapsed > 20) { lateReads++; Console.WriteLine($"Slow read: {elapsed:F1} ms at {position:F2} s"); }
+            if (read == 0) break;
+            samples += read;
+        }
+        Console.WriteLine($"Decoded {samples / (double)(source.WaveFormat.SampleRate * source.WaveFormat.Channels):F2} s " +
+            $"(reported {reader.TotalTime.TotalSeconds:F2} s); slowest read {slowestMs:F2} ms at {slowestPosition:F2} s; {lateReads} reads exceeded 20 ms.");
+    }
+
     private static async Task CheckAudioAsync()
     {
+        await CheckReadAheadAsync();
         using var temporary = new TemporaryTestDirectory("MusicPlayerAudioTests");
         foreach (var extension in AudioFormats)
         {
@@ -254,6 +280,7 @@ internal static partial class Program
 
     private static async Task CheckGaplessAsync()
     {
+        await CheckGaplessPollingAsync();
         var source = new GaplessSampleProvider(new TestSamples([1, 2, 3]));
         source.SetNext(new TestSamples([4, 5, 6]));
         var samples = new float[8];
@@ -316,6 +343,132 @@ internal static partial class Program
         output.RenderedPosition = player.Duration;
         await Task.Delay(40);
         Check(vm.IsPlaying && vm.IsQueueEmpty, "Repeat-all with a single track does not grow the upcoming queue");
+    }
+
+    private static async Task CheckGaplessPollingAsync()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var provider = new GaplessSampleProvider(new StalledSamples(entered, release));
+        var decoding = Task.Factory.StartNew(() => provider.Read(new float[16]),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task<TimeSpan?>? polling = null;
+        var responsive = false;
+        try
+        {
+            Check(entered.Wait(TimeSpan.FromSeconds(5)), "Stalled decoder begins its audio read");
+            polling = Task.Factory.StartNew(() => provider.Boundary,
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            responsive = await Task.WhenAny(polling, Task.Delay(500)) == polling;
+        }
+        finally
+        {
+            release.Set();
+            await decoding;
+            if (polling is not null) await polling;
+        }
+        Check(responsive && polling!.Result is null,
+            "Transition polling stays responsive while the audio decoder is stalled");
+    }
+
+    private static async Task CheckReadAheadAsync()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using (var source = new ReadAheadSampleProvider(new MidTrackStallSamples(entered, release)))
+        {
+            Task<float[]>? refill = null;
+            var responsive = false;
+            try
+            {
+                Check(entered.Wait(TimeSpan.FromSeconds(5)), "Read-ahead reaches a mid-track I/O stall");
+                refill = Task.Factory.StartNew(() =>
+                {
+                    var buffer = new float[10];
+                    Check(source.Read(buffer) == 10, "Buffered audio fills the callback during a disk stall");
+                    return buffer;
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                responsive = await Task.WhenAny(refill, Task.Delay(500)) == refill;
+            }
+            finally
+            {
+                release.Set();
+                if (refill is not null) await refill;
+            }
+            Check(responsive && refill!.Result.SequenceEqual(Enumerable.Range(0, 10).Select(i => (float)i)),
+                "Audio keeps its sample order and returns promptly while disk I/O is blocked");
+            var remaining = new List<float>();
+            var buffer = new float[7];
+            int read;
+            while ((read = source.Read(buffer)) != 0) remaining.AddRange(buffer.Take(read));
+            Check(remaining.SequenceEqual(Enumerable.Range(10, 90).Select(i => (float)i)),
+                "Read-ahead wraps its bounded buffer without losing samples or inventing EOF");
+        }
+        using var failing = new ReadAheadSampleProvider(new FailingSamples());
+        var failed = false;
+        try { failing.Read(new float[4]); }
+        catch (IOException ex) when (ex.InnerException is InvalidDataException) { failed = true; }
+        Check(failed, "Background decoder failures reach the output instead of becoming normal EOF");
+
+        var expected = Enumerable.Range(0, 5000).Select(i => (float)i).ToArray();
+        using (var source = new ReadAheadSampleProvider(new TestSamples(expected, sampleRate: 10)))
+        {
+            var actual = new List<float>();
+            var chunk = new float[13];
+            int read;
+            while ((read = source.Read(chunk)) != 0) actual.AddRange(chunk.Take(read));
+            Check(actual.SequenceEqual(expected), "Concurrent read-ahead preserves every sample over repeated ring wraps and EOF");
+        }
+
+        entered.Reset();
+        release.Reset();
+        using (var source = new ReadAheadSampleProvider(new StalledSamples(entered, release)))
+        {
+            Check(entered.Wait(TimeSpan.FromSeconds(5)), "Empty-buffer cancellation starts with a stalled decoder");
+            var reading = Task.Factory.StartNew(() => source.Read(new float[4]),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            try
+            {
+                source.RequestStop();
+                Check(await reading.WaitAsync(TimeSpan.FromSeconds(1)) == 0,
+                    "Stopping playback releases an empty audio callback before waiting for disk I/O");
+            }
+            finally { release.Set(); await reading; }
+        }
+    }
+
+    private sealed class MidTrackStallSamples(ManualResetEventSlim entered, ManualResetEventSlim release) : ISampleProvider
+    {
+        private int _position;
+        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(10, 1);
+        public int Read(Span<float> buffer)
+        {
+            if (_position == 20)
+            {
+                entered.Set();
+                if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Mid-track stall was not released.");
+            }
+            if (_position == 100) return 0;
+            buffer[0] = _position++;
+            return 1;
+        }
+    }
+
+    private sealed class FailingSamples : ISampleProvider
+    {
+        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+        public int Read(Span<float> buffer) => throw new InvalidDataException("Test decoder failure");
+    }
+
+    private sealed class StalledSamples(ManualResetEventSlim entered, ManualResetEventSlim release) : ISampleProvider
+    {
+        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+        public int Read(Span<float> buffer)
+        {
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Decoder was not released.");
+            return 0;
+        }
     }
 
     private sealed class TestSamples(float[] samples, int sampleRate = 44100, int channels = 1) : ISampleProvider
@@ -417,6 +570,7 @@ internal static partial class Program
 
     private static async Task CheckAudioDeviceLiveAsync()
     {
+        await CheckNativeAudioSchedulingAsync();
         using var player = new NAudioPlayer();
         Check(player.OutputDevices.Count > 1, "Windows Core Audio enumerates native endpoints");
         using var backend = new WindowsAudioBackend();
@@ -459,6 +613,38 @@ internal static partial class Program
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Check(player.OutputMessage is null && player.PresentationPosition == player.Duration,
             "Native gapless playback drains the final track normally");
+    }
+
+    private static async Task CheckNativeAudioSchedulingAsync()
+    {
+        using var backend = new WindowsAudioBackend();
+        using var output = backend.CreateOutput(backend.GetDefaultDeviceId());
+        var probe = new SchedulingProbeWaveProvider();
+        output.Init(probe);
+        output.Play();
+        await probe.Priority.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Check(probe.Priority.Task.Result >= 16,
+            $"Native playback runs at Windows multimedia audio priority (base {probe.Priority.Task.Result})");
+    }
+
+    private sealed class SchedulingProbeWaveProvider : IWaveProvider
+    {
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+        public TaskCompletionSource<int> Priority { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
+        public int Read(Span<byte> buffer)
+        {
+            if (!Priority.Task.IsCompleted)
+            {
+                using var process = System.Diagnostics.Process.GetCurrentProcess();
+                var threadId = GetCurrentThreadId();
+                Priority.TrySetResult(process.Threads.Cast<System.Diagnostics.ProcessThread>()
+                    .Single(thread => thread.Id == threadId).BasePriority);
+            }
+            buffer.Clear();
+            return buffer.Length;
+        }
     }
 
     private sealed class TestAudioBackend : IAudioBackend

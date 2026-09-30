@@ -95,7 +95,12 @@ internal sealed class WindowsAudioBackend : IAudioBackend
         public WindowsAudioOutput(MMDevice device)
         {
             _device = device;
-            try { _output = new WasapiPlayerBuilder().WithDevice(device).WithSharedMode().WithEventSync().WithLatency(100).Build(); }
+            try
+            {
+                _output = new WasapiPlayerBuilder().WithDevice(device).WithSharedMode()
+                    .WithEventSync().WithLatency(300).WithMmcssThreadPriority("Audio")
+                    .WithCategory(AudioStreamCategory.Media).Build();
+            }
             catch { device.Dispose(); throw; }
             _output.PlaybackStopped += OnStopped;
         }

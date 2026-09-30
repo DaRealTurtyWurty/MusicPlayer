@@ -11,7 +11,7 @@ internal sealed class GaplessSampleProvider(ISampleProvider source, TimeSpan? re
     private ISampleProvider _current = source;
     private ISampleProvider? _next;
     private long _samples;
-    private TimeSpan? _boundary;
+    private long _boundaryTicks = -1;
     private long _remainingFrames = remaining is { } time ? (long)(time.TotalSeconds * source.WaveFormat.SampleRate) : long.MaxValue;
     private long _nextFrames;
     private long _fadeFrames;
@@ -20,13 +20,24 @@ internal sealed class GaplessSampleProvider(ISampleProvider source, TimeSpan? re
     private float[] _mixBuffer = [];
     public TimeSpan NextPosition { get; private set; }
     public WaveFormat WaveFormat { get; } = source.WaveFormat;
-    public TimeSpan? Boundary { get { lock (_gate) return _boundary; } }
+    public TimeSpan ReadPosition => TimeSpan.FromSeconds(Interlocked.Read(ref _samples)
+        / (double)(WaveFormat.SampleRate * WaveFormat.Channels));
+    // The dispatcher polls this during playback. It must never wait for disk I/O
+    // performed by the decoder while Read holds the state lock.
+    public TimeSpan? Boundary
+    {
+        get
+        {
+            var ticks = Volatile.Read(ref _boundaryTicks);
+            return ticks < 0 ? null : TimeSpan.FromTicks(ticks);
+        }
+    }
 
     public bool SetNext(ISampleProvider? next, TimeSpan? duration = null)
     {
         lock (_gate)
         {
-            if (_boundary is not null || _fading) return false;
+            if (Boundary is not null || _fading) return false;
             _next = next is null ? null : Convert(next, WaveFormat);
             _nextFrames = duration is { } time ? (long)(time.TotalSeconds * WaveFormat.SampleRate) : long.MaxValue;
             // Short tracks retain a solo section before/after the overlap.
@@ -36,7 +47,7 @@ internal sealed class GaplessSampleProvider(ISampleProvider source, TimeSpan? re
         }
     }
 
-    public void Commit() { lock (_gate) _boundary = null; }
+    public void Commit() { lock (_gate) Volatile.Write(ref _boundaryTicks, -1); }
 
     internal static ISampleProvider Convert(ISampleProvider source, WaveFormat target)
     {
@@ -105,12 +116,14 @@ internal sealed class GaplessSampleProvider(ISampleProvider source, TimeSpan? re
 
     private void SwitchToNext()
     {
-        _boundary = TimeSpan.FromSeconds(_samples / (double)(WaveFormat.SampleRate * WaveFormat.Channels));
+        var boundary = TimeSpan.FromSeconds(_samples / (double)(WaveFormat.SampleRate * WaveFormat.Channels));
         _current = _next!;
         _next = null;
         _remainingFrames = Math.Max(0, _nextFrames - (_fading ? _fadeFrames : 0));
         _fading = false;
         _fadePosition = _fadeFrames = 0;
+        // Publish only after the incoming track and its clock offset are ready.
+        Volatile.Write(ref _boundaryTicks, boundary.Ticks);
     }
 
     private static void ReadFully(ISampleProvider provider, Span<float> buffer)

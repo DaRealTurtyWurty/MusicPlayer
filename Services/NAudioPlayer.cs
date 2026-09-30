@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Windows.Threading;
 using MusicPlayer.Models;
 using NAudio.SoundFile;
@@ -30,13 +31,15 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
         set => Volatile.Write(ref _replayGainOptions, (value ?? new()).Normalize());
     }
 
-    private ISampleProvider WithReplayGain(WaveStream reader, ReplayGainMetadata metadata) =>
-        new ReplayGainSampleProvider(reader.ToSampleProvider(), metadata, () => ReplayGainOptions);
+    private ISampleProvider WithReplayGain(ISampleProvider source, ReplayGainMetadata metadata) =>
+        new ReplayGainSampleProvider(source, metadata, () => ReplayGainOptions);
     private readonly IAudioBackend _backend;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly DispatcherTimer _deviceRefreshTimer;
     private readonly DispatcherTimer _transitionTimer;
     private GaplessSampleProvider? _gaplessSource;
+    private ReadAheadSampleProvider? _currentReadAhead;
+    private ReadAheadSampleProvider? _nextReadAhead;
     private WaveStream? _nextFile;
     private string? _nextPath;
     private IAudioOutput? _outputDevice;
@@ -75,7 +78,9 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
     public string? SelectedOutputDeviceId { get; private set; }
     public bool IsOutputPlaying => _outputDevice?.PlaybackState == PlaybackState.Playing;
     public string? OutputMessage { get; private set; }
-    public TimeSpan Position => _gaplessSource?.Boundary is not null ? PresentationPosition : _audioFile?.CurrentTime ?? TimeSpan.Zero;
+    public TimeSpan Position => _gaplessSource is { } source
+        ? source.Boundary is not null ? PresentationPosition : Clamp(_outputOrigin + source.ReadPosition)
+        : _audioFile?.CurrentTime ?? TimeSpan.Zero;
     public TimeSpan Duration => _audioFile?.TotalTime ?? TimeSpan.Zero;
 
     public TimeSpan PresentationPosition
@@ -128,6 +133,8 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
             Seek(PresentationPosition);
             _gaplessSource?.SetNext(null);
         }
+        _nextReadAhead?.Dispose();
+        _nextReadAhead = null;
         _nextFile?.Dispose();
         _nextFile = null;
         _nextPath = null;
@@ -138,11 +145,21 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
             if (reader.Length == 0 || reader.TotalTime <= TimeSpan.Zero)
                 throw new InvalidDataException("The audio file contains no playable samples.");
             _nextGain = ReplayGainMetadata.Read(filePath);
-            _gaplessSource?.SetNext(WithReplayGain(reader, _nextGain), reader.TotalTime);
+            if (_gaplessSource is { } source)
+            {
+                _nextReadAhead = new ReadAheadSampleProvider(reader.ToSampleProvider());
+                source.SetNext(WithReplayGain(_nextReadAhead, _nextGain), reader.TotalTime);
+            }
             _nextFile = reader;
             _nextPath = filePath;
         }
-        catch { reader.Dispose(); throw; }
+        catch
+        {
+            _nextReadAhead?.Dispose();
+            _nextReadAhead = null;
+            reader.Dispose();
+            throw;
+        }
     }
 
     private void OnTransitionTick(object? sender, EventArgs e) => CommitTransition(false);
@@ -155,6 +172,9 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
             if (!drained && _outputDevice.RenderedPosition < boundary) return;
         }
         catch (Exception ex) { HandleOutputFailure(ex); return; }
+        _currentReadAhead?.Dispose();
+        _currentReadAhead = _nextReadAhead;
+        _nextReadAhead = null;
         _audioFile?.Dispose();
         _audioFile = _nextFile;
         _currentGain = _nextGain;
@@ -182,13 +202,19 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
         _playRequested = true;
         if (_suspended) return;
         if (_outputDevice is null && !TryInitializeOutput()) return;
-        try { _outputDevice!.Play(); PublishStatus(OutputMessage); }
+        try
+        {
+            _outputSource?.BeginPlayback();
+            _outputDevice!.Play();
+            PublishStatus(OutputMessage);
+        }
         catch (Exception ex) { HandleOutputFailure(ex); }
     }
 
     public void Pause()
     {
         _playRequested = false;
+        _outputSource?.EndPlayback();
         try { _outputDevice?.Pause(); PublishStatus(OutputMessage); }
         catch (Exception ex) { HandleOutputFailure(ex); }
     }
@@ -229,15 +255,20 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
         try
         {
             var (id, fallback) = ResolveDevice();
-            _gaplessSource = new GaplessSampleProvider(WithReplayGain(_audioFile, _currentGain),
-                _audioFile.TotalTime - _audioFile.CurrentTime, CrossfadeOptions.Enabled ? CrossfadeOptions.DurationSeconds : 0);
+            var remaining = _audioFile.TotalTime - _audioFile.CurrentTime;
+            _currentReadAhead = new ReadAheadSampleProvider(_audioFile.ToSampleProvider());
+            _gaplessSource = new GaplessSampleProvider(WithReplayGain(_currentReadAhead, _currentGain),
+                remaining, CrossfadeOptions.Enabled ? CrossfadeOptions.DurationSeconds : 0);
             if (_nextFile is not null)
             {
                 _nextFile.Position = 0;
-                _gaplessSource.SetNext(WithReplayGain(_nextFile, _nextGain), _nextFile.TotalTime);
+                _nextReadAhead = new ReadAheadSampleProvider(_nextFile.ToSampleProvider());
+                _gaplessSource.SetNext(WithReplayGain(_nextReadAhead, _nextGain), _nextFile.TotalTime);
             }
             _volumeProvider = new VolumeSampleProvider(_gaplessSource) { Volume = _volume };
-            var source = new EndOfStreamWaveProvider(_volumeProvider.ToWaveProvider());
+            var source = new EndOfStreamWaveProvider(_volumeProvider.ToWaveProvider(), () =>
+                ((_currentReadAhead?.WaitingReads ?? 0) + (_nextReadAhead?.WaitingReads ?? 0),
+                 _currentReadAhead?.BufferedMilliseconds ?? 0, _nextReadAhead?.BufferedMilliseconds ?? 0));
             var output = _backend.CreateOutput(id);
             try { output.Init(source); }
             catch { output.Dispose(); throw; }
@@ -281,6 +312,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
 
     private void HandleOutputFailure(Exception exception)
     {
+        Trace.TraceWarning($"Audio output failure: {exception}");
         // Keep the reader and the user's playback intent for retry/reconnection. Never
         // signal EOF for an output/decoder exception, even if read-ahead reached EOF.
         DisposeOutput();
@@ -389,14 +421,25 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
     private void DisposeOutput()
     {
         var output = _outputDevice;
+        _outputSource?.EndPlayback();
         _outputDevice = null;
         _outputSource = null;
         _gaplessSource = null;
         _activeDeviceId = null;
-        if (output is null) return;
-        output.PlaybackStopped -= OnPlaybackStopped;
-        try { output.Dispose(); }
+        if (output is not null) output.PlaybackStopped -= OnPlaybackStopped;
+        var currentReadAhead = _currentReadAhead;
+        _currentReadAhead = null;
+        var nextReadAhead = _nextReadAhead;
+        _nextReadAhead = null;
+        currentReadAhead?.RequestStop();
+        nextReadAhead?.RequestStop();
+        try { output?.Dispose(); }
         catch (Exception ex) { System.Diagnostics.Trace.TraceWarning($"Could not close audio output: {ex.Message}"); }
+        finally
+        {
+            currentReadAhead?.Dispose();
+            nextReadAhead?.Dispose();
+        }
     }
 
     private void DisposePlayback()
@@ -430,14 +473,51 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
 
     // Compressed readers can estimate Length beyond the actual decoded samples
     // (e.g. MP3 padding). EOF is determined by the decoder, not that estimate.
-    private sealed class EndOfStreamWaveProvider(IWaveProvider source) : IWaveProvider
+    private sealed class EndOfStreamWaveProvider(IWaveProvider source,
+        Func<(long WaitingReads, double CurrentBufferMs, double NextBufferMs)> readAheadState) : IWaveProvider
     {
         private volatile bool _endReached;
+        private volatile bool _playing;
+        private long _lastReadFinished;
+        private long _lastWarning;
         public bool EndReached => _endReached;
         public WaveFormat WaveFormat => source.WaveFormat;
+        public void BeginPlayback()
+        {
+            Interlocked.Exchange(ref _lastReadFinished, 0);
+            _playing = true;
+        }
+        public void EndPlayback()
+        {
+            _playing = false;
+            Interlocked.Exchange(ref _lastReadFinished, 0);
+        }
         public int Read(Span<byte> buffer)
         {
+            var started = Stopwatch.GetTimestamp();
+            var waitingReads = readAheadState().WaitingReads;
+            var gcPause = GC.GetTotalPauseDuration();
+            var previous = Interlocked.Read(ref _lastReadFinished);
+            var gap = previous == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(previous, started);
             var read = source.Read(buffer);
+            var finished = Stopwatch.GetTimestamp();
+            var elapsed = Stopwatch.GetElapsedTime(started, finished);
+            Interlocked.Exchange(ref _lastReadFinished, _playing ? finished : 0);
+            var bufferMs = buffer.Length * 1000d / WaveFormat.AverageBytesPerSecond;
+            if (_playing && (elapsed.TotalMilliseconds > Math.Max(50, bufferMs)
+                || gap.TotalMilliseconds > Math.Max(250, bufferMs * 2))
+                && (_lastWarning == 0 || Stopwatch.GetElapsedTime(_lastWarning, finished).TotalSeconds >= 5))
+            {
+                _lastWarning = finished;
+                var state = readAheadState();
+                var message = $"Audio refill delay: read took {elapsed.TotalMilliseconds:F1} ms; " +
+                    $"gap since previous refill {gap.TotalMilliseconds:F1} ms; buffer {bufferMs:F1} ms; bytes {read}/{buffer.Length}; " +
+                    $"read-ahead {state.CurrentBufferMs:F0}/{state.NextBufferMs:F0} ms; " +
+                    $"empty-buffer waits {Math.Max(0, state.WaitingReads - waitingReads)}; " +
+                    $"GC pause during read {(GC.GetTotalPauseDuration() - gcPause).TotalMilliseconds:F1} ms.";
+                // Logging writes to disk. Keep it off the audio callback.
+                ThreadPool.QueueUserWorkItem(_ => Trace.TraceWarning(message));
+            }
             if (buffer.Length > 0 && read == 0) _endReached = true;
             return read;
         }
