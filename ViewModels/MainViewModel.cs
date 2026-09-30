@@ -160,6 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _fileLocationService = fileLocationService ?? new FileLocationService();
         _random = random ?? Random.Shared;
         _uiPreferencesStore = uiPreferencesStore;
+        InitializeReplayGain();
         isGaplessPlaybackEnabled = _uiPreferencesStore?.LoadGaplessPlaybackEnabled() ?? true;
         InitializeAudioDevices();
         _discordPresenceOptions = _uiPreferencesStore?.LoadDiscordPresence() ?? new();

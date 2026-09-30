@@ -520,6 +520,12 @@ internal static partial class Program
             var buffer = new byte[bytes - bytes % _source.WaveFormat.BlockAlign];
             _source.Read(buffer.AsSpan());
         }
+        public float ReadSample()
+        {
+            var buffer = new byte[_source!.WaveFormat.BlockAlign];
+            _source.Read(buffer.AsSpan());
+            return BitConverter.ToSingle(buffer);
+        }
         public void Drain()
         {
             var buffer = new byte[4096];

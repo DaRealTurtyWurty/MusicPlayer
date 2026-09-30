@@ -14,6 +14,22 @@
              AutomationProperties.Name="Gapless playback" />
    <TextBlock Text="Play consecutive tracks without a pause between them. Changes apply immediately."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
+   <TextBlock Text="ReplayGain" FontSize="18" Margin="0,0,0,12" />
+   <CheckBox x:Name="ReplayGainEnabledCheckBox" Content="Normalize volume with ReplayGain"
+             IsChecked="{Binding IsReplayGainEnabled, Mode=TwoWay}" AutomationProperties.Name="Enable ReplayGain" />
+   <TextBlock Text="Uses existing ReplayGain tags. Untagged songs keep their original level. Track mode balances individual songs; album mode preserves an album's volume differences, falling back to track gain when album gain is missing."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
+   <StackPanel IsEnabled="{Binding IsReplayGainEnabled}">
+    <Label Content="Gain mode" Target="{Binding ElementName=ReplayGainModeSelector}" Padding="0,0,0,6" />
+    <ComboBox x:Name="ReplayGainModeSelector" ItemsSource="{Binding ReplayGainModes}" SelectedItem="{Binding SelectedReplayGainMode, Mode=TwoWay}"
+              Width="180" HorizontalAlignment="Left" AutomationProperties.Name="ReplayGain mode" />
+    <TextBlock Text="{Binding ReplayGainPreampDb, StringFormat='Preamp: {0:0.0} dB'}" Margin="0,12,0,6" />
+    <Slider Minimum="-12" Maximum="12" TickFrequency="0.5" IsSnapToTickEnabled="True" Width="300" HorizontalAlignment="Left"
+            Value="{Binding ReplayGainPreampDb, Mode=TwoWay}" AutomationProperties.Name="ReplayGain preamp in decibels" />
+    <CheckBox Content="Prevent clipping" IsChecked="{Binding ReplayGainPreventClipping, Mode=TwoWay}" Margin="0,12,0,0" />
+   </StackPanel>
+   <TextBlock Text="Changes are saved automatically and apply to newly decoded audio, including the next gapless track. Clipping protection may reduce the requested boost."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
    <TextBlock Text="Discord presence" FontSize="18" Margin="0,0,0,12" />
    <TextBlock Text="Share your current song, artist, album, and playback time on your Discord profile. Presence clears when you pause or stop."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12" />

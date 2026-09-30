@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--replaygain-smoke"])
+        {
+            var replayGainApp = new App(suppressStartup: true);
+            replayGainApp.InitializeComponent();
+            replayGainApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckReplayGain();
+            return;
+        }
         if (args is ["--release-readiness-smoke"])
         {
             SqlitePersistenceTests.Run();
