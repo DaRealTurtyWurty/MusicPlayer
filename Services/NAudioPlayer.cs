@@ -6,11 +6,15 @@ using NAudio.Wave.SampleProviders;
 
 namespace MusicPlayer.Services;
 
-public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
+public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAudioPlayer, IDisposable
 {
     private readonly IAudioBackend _backend;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private readonly DispatcherTimer _deviceRefreshTimer;
+    private readonly DispatcherTimer _transitionTimer;
+    private GaplessSampleProvider? _gaplessSource;
+    private WaveStream? _nextFile;
+    private string? _nextPath;
     private IAudioOutput? _outputDevice;
     private string? _activeDeviceId;
     private WaveStream? _audioFile;
@@ -29,6 +33,9 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
     internal NAudioPlayer(IAudioBackend backend)
     {
         _backend = backend;
+        _transitionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        _transitionTimer.Tick += OnTransitionTick;
+        _transitionTimer.Start();
         _deviceRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _deviceRefreshTimer.Tick += OnDeviceRefreshTick;
         _backend.DevicesChanged += OnDevicesChanged;
@@ -37,13 +44,14 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
     }
 
     public event EventHandler? PlaybackEnded;
+    public event EventHandler? NextTrackStarted;
     public event EventHandler? OutputDevicesChanged;
     public event EventHandler<AudioOutputStatusEventArgs>? OutputStatusChanged;
     public IReadOnlyList<AudioOutputDevice> OutputDevices { get; private set; } = [];
     public string? SelectedOutputDeviceId { get; private set; }
     public bool IsOutputPlaying => _outputDevice?.PlaybackState == PlaybackState.Playing;
     public string? OutputMessage { get; private set; }
-    public TimeSpan Position => _audioFile?.CurrentTime ?? TimeSpan.Zero;
+    public TimeSpan Position => _gaplessSource?.Boundary is not null ? PresentationPosition : _audioFile?.CurrentTime ?? TimeSpan.Zero;
     public TimeSpan Duration => _audioFile?.TotalTime ?? TimeSpan.Zero;
 
     public TimeSpan PresentationPosition
@@ -51,7 +59,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
         get
         {
             if (_presentationEnded) return Duration;
-            if (_outputDevice is null || _outputDevice.PlaybackState == PlaybackState.Stopped) return _outputOrigin;
+            if (_outputDevice is null || _outputDevice.PlaybackState == PlaybackState.Stopped) return Clamp(_lastPresentationPosition);
             try
             {
                 _lastPresentationPosition = Clamp(_outputOrigin + _outputDevice.RenderedPosition);
@@ -80,10 +88,55 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
             _audioFile = CreateReader(filePath);
             if (_audioFile.Length == 0 || _audioFile.TotalTime <= TimeSpan.Zero)
                 throw new InvalidDataException("The audio file contains no playable samples.");
-            _volumeProvider = new VolumeSampleProvider(_audioFile.ToSampleProvider()) { Volume = _volume };
         }
         catch { DisposePlayback(); throw; }
         TryInitializeOutput();
+    }
+
+    public void PrepareNext(string? filePath)
+    {
+        if (_audioFile is null || filePath == _nextPath) return;
+        // A queue edit can invalidate audio already read ahead. Flush that audio
+        // and restore the audible current-track position before replacing it.
+        if (_gaplessSource?.SetNext(null) == false)
+        {
+            Seek(PresentationPosition);
+            _gaplessSource?.SetNext(null);
+        }
+        _nextFile?.Dispose();
+        _nextFile = null;
+        _nextPath = null;
+        if (filePath is null) return;
+        var reader = CreateReader(filePath);
+        try
+        {
+            if (reader.Length == 0 || reader.TotalTime <= TimeSpan.Zero)
+                throw new InvalidDataException("The audio file contains no playable samples.");
+            _gaplessSource?.SetNext(reader.ToSampleProvider());
+            _nextFile = reader;
+            _nextPath = filePath;
+        }
+        catch { reader.Dispose(); throw; }
+    }
+
+    private void OnTransitionTick(object? sender, EventArgs e) => CommitTransition(false);
+
+    private void CommitTransition(bool drained)
+    {
+        if (_gaplessSource?.Boundary is not { } boundary || _nextFile is null || _outputDevice is null) return;
+        try
+        {
+            if (!drained && _outputDevice.RenderedPosition < boundary) return;
+        }
+        catch (Exception ex) { HandleOutputFailure(ex); return; }
+        _audioFile?.Dispose();
+        _audioFile = _nextFile;
+        _nextFile = null;
+        _nextPath = null;
+        _outputOrigin = -boundary;
+        _lastPresentationPosition = TimeSpan.Zero;
+        _gaplessSource.Commit();
+        NextTrackStarted?.Invoke(this, EventArgs.Empty);
     }
 
     internal static WaveStream CreateReader(string filePath)
@@ -145,12 +198,19 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
 
     private bool TryInitializeOutput()
     {
-        if (_volumeProvider is null || _suspended) return false;
+        if (_audioFile is null || _suspended) return false;
         try
         {
             var (id, fallback) = ResolveDevice();
-            var output = _backend.CreateOutput(id);
+            _gaplessSource = new GaplessSampleProvider(_audioFile.ToSampleProvider());
+            if (_nextFile is not null)
+            {
+                _nextFile.Position = 0;
+                _gaplessSource.SetNext(_nextFile.ToSampleProvider());
+            }
+            _volumeProvider = new VolumeSampleProvider(_gaplessSource) { Volume = _volume };
             var source = new EndOfStreamWaveProvider(_volumeProvider.ToWaveProvider());
+            var output = _backend.CreateOutput(id);
             try { output.Init(source); }
             catch { output.Dispose(); throw; }
             _outputDevice = output;
@@ -291,6 +351,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
             HandleOutputFailure(new IOException("The output device stopped before the track ended."));
             return;
         }
+        CommitTransition(true);
         _playRequested = false;
         _presentationEnded = true;
         PublishStatus(null);
@@ -302,6 +363,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
         var output = _outputDevice;
         _outputDevice = null;
         _outputSource = null;
+        _gaplessSource = null;
         _activeDeviceId = null;
         if (output is null) return;
         output.PlaybackStopped -= OnPlaybackStopped;
@@ -316,6 +378,9 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
         DisposeOutput();
         _audioFile?.Dispose();
         _audioFile = null;
+        _nextFile?.Dispose();
+        _nextFile = null;
+        _nextPath = null;
         _volumeProvider = null;
         _outputOrigin = _lastPresentationPosition = TimeSpan.Zero;
         _presentationEnded = false;
@@ -326,6 +391,8 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IDisposable
         if (_disposed) return;
         _disposed = true;
         _deviceRefreshTimer.Stop();
+        _transitionTimer.Stop();
+        _transitionTimer.Tick -= OnTransitionTick;
         _deviceRefreshTimer.Tick -= OnDeviceRefreshTick;
         _backend.DevicesChanged -= OnDevicesChanged;
         _backend.PowerChanged -= OnPowerChanged;

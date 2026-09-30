@@ -9,6 +9,11 @@
              SelectedItem="{Binding SelectedAudioOutputDevice, Mode=TwoWay}" IsEnabled="{Binding CanSelectAudioOutput}"
              MinWidth="300" MaxWidth="600" HorizontalAlignment="Left" AutomationProperties.Name="Audio output device" />
    <TextBlock Text="{Binding AudioOutputMessage}" TextWrapping="Wrap" Margin="0,8,0,24" />
+   <TextBlock Text="Playback" FontSize="18" Margin="0,0,0,12" />
+   <CheckBox x:Name="GaplessPlaybackCheckBox" Content="Gapless playback" IsChecked="{Binding IsGaplessPlaybackEnabled, Mode=TwoWay}"
+             AutomationProperties.Name="Gapless playback" />
+   <TextBlock Text="Play consecutive tracks without a pause between them. Changes apply immediately."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
    <TextBlock Text="Discord presence" FontSize="18" Margin="0,0,0,12" />
    <TextBlock Text="Share your current song, artist, album, and playback time on your Discord profile. Presence clears when you pause or stop."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12" />

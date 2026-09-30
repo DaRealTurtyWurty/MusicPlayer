@@ -16,6 +16,8 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
     public bool LoadQueueOpen() => Load().IsQueueOpen;
     public string? LoadOutputDeviceId() => Load().OutputDeviceId;
     public void SaveOutputDeviceId(string? deviceId) => Save(Load() with { OutputDeviceId = deviceId });
+    public bool LoadGaplessPlaybackEnabled() => Load().GaplessPlaybackEnabled;
+    public void SaveGaplessPlaybackEnabled(bool enabled) => Save(Load() with { GaplessPlaybackEnabled = enabled });
 
     public DiscordPresenceOptions LoadDiscordPresence() => Load().DiscordPresence ?? new();
 
@@ -105,5 +107,6 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
     private sealed record Preferences(bool IsQueueOpen = false, AppPage SelectedPage = AppPage.Library,
         double Volume = 100, double VolumeBeforeMute = 100,
         bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off,
-        bool LyricsEnabled = true, DiscordPresenceOptions? DiscordPresence = null, string? OutputDeviceId = null, LibraryWorkflowPreferences? LibraryWorkflow = null);
+        bool LyricsEnabled = true, DiscordPresenceOptions? DiscordPresence = null, string? OutputDeviceId = null, LibraryWorkflowPreferences? LibraryWorkflow = null,
+        bool GaplessPlaybackEnabled = true);
 }

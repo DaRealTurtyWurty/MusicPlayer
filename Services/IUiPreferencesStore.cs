@@ -8,6 +8,8 @@ public interface IUiPreferencesStore
     void SaveLibraryWorkflow(LibraryWorkflowPreferences preferences) { }
     string? LoadOutputDeviceId() => null;
     void SaveOutputDeviceId(string? deviceId) { }
+    bool LoadGaplessPlaybackEnabled() => true;
+    void SaveGaplessPlaybackEnabled(bool enabled) { }
     bool LoadQueueOpen();
     void SaveQueueOpen(bool isOpen);
     AppPage LoadSelectedPage();

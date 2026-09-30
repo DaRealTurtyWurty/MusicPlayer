@@ -64,6 +64,8 @@ internal static partial class Program
         }
 
         await CheckAudioRecoveryAsync(temporary.Path);
+        await CheckGaplessAsync();
+        await CheckGaplessPreferenceAsync(temporary.Path);
         await CheckAudioQueueAsync(temporary.Path);
         CheckAudioDeviceLayout();
     }
@@ -192,11 +194,23 @@ internal static partial class Program
         foreach (var extension in AudioFormats)
             vm.Queue.Add(new() { FilePath = AudioFixture(extension), Title = extension, ArtworkData = [] });
         vm.PlayCommand.Execute(null);
+        var rendered = TimeSpan.Zero;
         foreach (var extension in AudioFormats)
         {
             Check(vm.IsPlaying && vm.CurrentTrack?.Title == extension, $"Queue transitions into {extension}");
-            backend.Last!.Drain();
-            backend.Last.End();
+            if (extension == AudioFormats[^1])
+            {
+                backend.Last!.Drain();
+                backend.Last.End();
+            }
+            else
+            {
+                var step = player.Duration + TimeSpan.FromMilliseconds(50);
+                backend.Last!.ReadAhead(step);
+                rendered += step;
+                backend.Last.RenderedPosition = rendered;
+                await Task.Delay(40);
+            }
         }
         Check(!vm.IsPlaying && vm.IsQueueEmpty, "Mixed-format queue exhausts normally");
         vm.PlayCommand.Execute(null);
@@ -232,9 +246,140 @@ internal static partial class Program
         Check(vm.IsPlaying && player.Position == TimeSpan.Zero, "Real-reader repeat-one reloads current track");
         vm.RepeatMode = PlaybackRepeatMode.All;
         vm.Queue.Add(new() { FilePath = AudioFixture("wav"), Title = "repeat-next", ArtworkData = [] });
-        backend.Last!.Drain();
-        backend.Last.End();
+        backend.Last!.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
+        backend.Last.RenderedPosition = player.Duration + TimeSpan.FromMilliseconds(50);
+        await Task.Delay(40);
         Check(vm.CurrentTrack?.Title == "repeat-next" && vm.Queue.Count == 1, "Real-reader repeat-all recycles exactly once");
+    }
+
+    private static async Task CheckGaplessAsync()
+    {
+        var source = new GaplessSampleProvider(new TestSamples([1, 2, 3]));
+        source.SetNext(new TestSamples([4, 5, 6]));
+        var samples = new float[8];
+        var read = source.Read(samples);
+        Check(read == 6 && samples.Take(read).SequenceEqual(new float[] { 1, 2, 3, 4, 5, 6 }),
+            "Gapless stream fills a single buffer across EOF without inserted silence or lost samples");
+        Check(source.Boundary == TimeSpan.FromSeconds(3d / 44100) && source.Read(samples) == 0,
+            "Gapless stream records the exact sample boundary and terminates after its final track");
+        source = new GaplessSampleProvider(new TestSamples([1, 2], channels: 2));
+        source.SetNext(new TestSamples([3, 4]));
+        read = source.Read(samples);
+        Check(read == 6 && samples.Take(read).SequenceEqual(new float[] { 1, 2, 3, 3, 4, 4 }),
+            "Gapless mono-to-stereo conversion preserves sample order across the boundary");
+        source = new GaplessSampleProvider(new TestSamples([1]));
+        source.SetNext(new TestSamples(Enumerable.Repeat(.25f, 2205).ToArray(), sampleRate: 22050));
+        read = source.Read(new float[10000]);
+        Check(source.WaveFormat.SampleRate == 44100 && read is > 4300 and < 4500,
+            "Gapless tracks with different sample rates retain one output format and duration");
+
+        var backend = new TestAudioBackend();
+        using var player = new NAudioPlayer(backend);
+        using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player, monitorLibrary: false);
+        var first = new Track { FilePath = AudioFixture("wav"), Title = "first", ArtworkData = [] };
+        var second = new Track { FilePath = AudioFixture("flac"), Title = "second", ArtworkData = [] };
+        var third = new Track { FilePath = AudioFixture("ogg"), Title = "third", ArtworkData = [] };
+        vm.Queue.Add(first);
+        vm.Queue.Add(second);
+        vm.PlayCommand.Execute(null);
+        var output = backend.Last!;
+        var outputs = backend.Outputs.Count;
+        output.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
+        Check(vm.CurrentTrack == first && vm.Queue.Count == 1, "Decoder read-ahead does not advance the visible queue");
+        output.RenderedPosition = TimeSpan.FromSeconds(2.05);
+        await Task.Delay(40);
+        Check(vm.CurrentTrack == second && vm.IsQueueEmpty && vm.IsPlaying && backend.Outputs.Count == outputs && !output.Disposed,
+            "Audible gapless transition advances metadata and queue without restarting output");
+        Check(player.PresentationPosition.TotalSeconds is >= 0 and < .1, "Gapless transition resets the per-track presentation clock");
+        vm.Queue.Add(third);
+        output.ReadAhead(TimeSpan.FromSeconds(2));
+        vm.Queue.Clear();
+        Check(output.Disposed && vm.CurrentTrack == second && vm.IsQueueEmpty,
+            "Removing a buffered upcoming track flushes stale audio and preserves the current track");
+        vm.RepeatMode = PlaybackRepeatMode.One;
+        output = backend.Last!;
+        outputs = backend.Outputs.Count;
+        output.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
+        output.RenderedPosition = player.Duration + TimeSpan.FromMilliseconds(50);
+        await Task.Delay(40);
+        Check(vm.CurrentTrack == second && vm.IsPlaying && backend.Outputs.Count == outputs,
+            "Repeat-one continues on the same output");
+        vm.PauseCommand.Execute(null);
+        Check(!vm.IsPlaying, "Pause after a gapless transition stays paused");
+        player.Seek(TimeSpan.FromSeconds(.5));
+        Check(!player.IsOutputPlaying && Math.Abs(player.PresentationPosition.TotalSeconds - .5) < .05,
+            "Seeking after a gapless transition uses the current track and stays paused");
+        vm.RepeatMode = PlaybackRepeatMode.All;
+        vm.PlayCommand.Execute(null);
+        output = backend.Last!;
+        output.ReadAhead(player.Duration);
+        output.RenderedPosition = player.Duration;
+        await Task.Delay(40);
+        Check(vm.IsPlaying && vm.IsQueueEmpty, "Repeat-all with a single track does not grow the upcoming queue");
+    }
+
+    private sealed class TestSamples(float[] samples, int sampleRate = 44100, int channels = 1) : ISampleProvider
+    {
+        private int _position;
+        public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
+        public int Read(Span<float> buffer)
+        {
+            var count = Math.Min(buffer.Length, samples.Length - _position);
+            samples.AsSpan(_position, count).CopyTo(buffer);
+            _position += count;
+            return count;
+        }
+    }
+
+    private static async Task CheckGaplessPreferenceAsync(string directory)
+    {
+        var path = Path.Combine(directory, "gapless-preferences.json");
+        var preferences = new JsonUiPreferencesStore(path);
+        Check(preferences.LoadGaplessPlaybackEnabled(), "Gapless playback defaults to enabled for new preferences");
+        File.WriteAllText(path, "{\"Volume\":35}");
+        Check(preferences.LoadGaplessPlaybackEnabled(), "Existing preferences default gapless playback to enabled");
+
+        var backend = new TestAudioBackend();
+        using (var player = new NAudioPlayer(backend))
+        using (var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player,
+                   uiPreferencesStore: preferences, monitorLibrary: false))
+        {
+            Check(vm.IsGaplessPlaybackEnabled, "View model restores the enabled gapless default");
+            var first = new Track { FilePath = AudioFixture("wav"), Title = "first", ArtworkData = [] };
+            var second = new Track { FilePath = AudioFixture("flac"), Title = "second", ArtworkData = [] };
+            vm.Queue.Add(first);
+            vm.Queue.Add(second);
+            vm.PlayCommand.Execute(null);
+            var bufferedOutput = backend.Last!;
+            bufferedOutput.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
+            vm.IsGaplessPlaybackEnabled = false;
+            Check(bufferedOutput.Disposed && vm.CurrentTrack == first && vm.Queue.Count == 1 && vm.IsPlaying,
+                "Disabling gapless flushes the buffered next track without consuming the queue or stopping playback");
+            var ordinaryOutput = backend.Last!;
+            ordinaryOutput.Drain();
+            ordinaryOutput.End();
+            Check(vm.CurrentTrack == second && ordinaryOutput.Disposed && vm.IsPlaying,
+                "Disabled gapless uses normal EOF track advancement");
+            vm.Queue.Add(first);
+            vm.IsGaplessPlaybackEnabled = true;
+            var continuousOutput = backend.Last!;
+            continuousOutput.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
+            continuousOutput.RenderedPosition = player.Duration + TimeSpan.FromMilliseconds(50);
+            await Task.Delay(40);
+            Check(vm.CurrentTrack == first && ReferenceEquals(backend.Last, continuousOutput) && vm.IsPlaying,
+                "Re-enabling gapless during playback prepares the next track and keeps output running");
+            vm.IsGaplessPlaybackEnabled = false;
+            vm.Volume = 42;
+            vm.RepeatMode = PlaybackRepeatMode.All;
+            Check(!preferences.LoadGaplessPlaybackEnabled() && preferences.LoadVolume().Volume == 42,
+                "Gapless preference is saved immediately and survives other preference updates");
+        }
+        using var restoredPlayer = new NAudioPlayer(new TestAudioBackend());
+        using var restored = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), restoredPlayer,
+            uiPreferencesStore: new JsonUiPreferencesStore(path), monitorLibrary: false);
+        Check(!restored.IsGaplessPlaybackEnabled, "Restart restores disabled gapless playback");
+        restored.IsGaplessPlaybackEnabled = true;
+        Check(new JsonUiPreferencesStore(path).LoadGaplessPlaybackEnabled(), "Enabled gapless preference also persists");
     }
 
     private static void CheckAudioDeviceLayout()
@@ -248,6 +393,12 @@ internal static partial class Program
         var selector = (System.Windows.Controls.ComboBox)settings.FindName("AudioOutputSelector");
         Check(selector.Items.Count == 3 && selector.SelectedItem is AudioOutputDevice { Id: null } && selector.ActualWidth > 100,
             "Output selector binds default and named endpoints in Settings");
+        var gapless = (System.Windows.Controls.CheckBox)settings.FindName("GaplessPlaybackCheckBox");
+        Check(gapless.IsChecked == true && gapless.ActualWidth > 0, "Settings shows gapless playback enabled by default");
+        gapless.IsChecked = false;
+        Check(!vm.IsGaplessPlaybackEnabled, "Gapless settings checkbox updates the playback preference");
+        vm.IsGaplessPlaybackEnabled = true;
+        Check(gapless.IsChecked == true, "Gapless settings checkbox reflects preference changes");
         var content = (System.Windows.FrameworkElement)settings.Content;
         content.UpdateLayout();
         var image = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth,
@@ -295,6 +446,19 @@ internal static partial class Program
                 $"Native {extension}: playing seek drains to natural EOF");
             player.PlaybackEnded -= handler;
         }
+        var transitioned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        player.NextTrackStarted += (_, _) => transitioned.TrySetResult();
+        player.PlaybackEnded += (_, _) => completed.TrySetResult();
+        player.Load(AudioFixture("wav"));
+        player.PrepareNext(AudioFixture("flac"));
+        player.Play();
+        await transitioned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Check(player.IsOutputPlaying && player.PresentationPosition.TotalSeconds < .2 && !completed.Task.IsCompleted,
+            "Native WASAPI transitions into the prepared track while output keeps playing");
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Check(player.OutputMessage is null && player.PresentationPosition == player.Duration,
+            "Native gapless playback drains the final track normally");
     }
 
     private sealed class TestAudioBackend : IAudioBackend

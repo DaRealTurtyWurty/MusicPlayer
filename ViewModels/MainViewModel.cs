@@ -160,6 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _fileLocationService = fileLocationService ?? new FileLocationService();
         _random = random ?? Random.Shared;
         _uiPreferencesStore = uiPreferencesStore;
+        isGaplessPlaybackEnabled = _uiPreferencesStore?.LoadGaplessPlaybackEnabled() ?? true;
         InitializeAudioDevices();
         _discordPresenceOptions = _uiPreferencesStore?.LoadDiscordPresence() ?? new();
         Lyrics = new LyricsViewModel(lyricsSource ?? new LocalLyricsSource(), uiPreferencesStore);
@@ -180,6 +181,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _positionTimer.Tick += OnPositionTimerTick;
         _positionTimer.Start();
         _audioPlayer.PlaybackEnded += OnPlaybackEnded;
+        if (_audioPlayer is IGaplessAudioPlayer gapless) gapless.NextTrackStarted += OnGaplessTrackStarted;
+        Queue.CollectionChanged += OnGaplessQueueChanged;
         Queue.CollectionChanged += OnTimelineQueueChanged;
         InitializeLibrary(libraryStore);
         InitializePages(playlistStore);
@@ -274,8 +277,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _uiPreferencesStore?.SavePlaybackModes(value, RepeatMode);
     }
 
-    partial void OnRepeatModeChanged(PlaybackRepeatMode value) =>
+    partial void OnRepeatModeChanged(PlaybackRepeatMode value)
+    {
         _uiPreferencesStore?.SavePlaybackModes(IsShuffleEnabled, value);
+        PrepareGaplessTrack();
+    }
 
     private void ShuffleQueue()
     {
@@ -515,6 +521,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             DurationSeconds = _audioPlayer.Duration.TotalSeconds;
             PositionSeconds = 0;
 
+            PrepareGaplessTrack();
             if (playImmediately)
                 _audioPlayer.Play();
             IsPlaybackStopped = false;
@@ -594,6 +601,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         DisposePlaybackSession();
         _positionTimer.Stop();
         _audioPlayer.PlaybackEnded -= OnPlaybackEnded;
+        if (_audioPlayer is IGaplessAudioPlayer gapless) gapless.NextTrackStarted -= OnGaplessTrackStarted;
+        Queue.CollectionChanged -= OnGaplessQueueChanged;
         DisposeAudioDevices();
         DisposeLibrary();
         if (SelectedPlaylist is not null)
