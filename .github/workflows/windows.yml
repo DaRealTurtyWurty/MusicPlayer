@@ -1,0 +1,35 @@
+name: Windows regression and release
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore locked dependencies
+        run: dotnet restore Tests/MusicPlayer.QueueTests.csproj --locked-mode
+      - name: Build regression runner
+        run: dotnet build Tests/MusicPlayer.QueueTests.csproj -c Release --no-restore
+      - name: Run offline Windows regressions
+        run: |
+          dotnet run --project Tests/MusicPlayer.QueueTests.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project Tests/MusicPlayer.QueueTests.csproj -c Release --no-build -- --release-readiness-smoke
+          exit $LASTEXITCODE
+      - name: Package self-contained Windows release
+        run: ./scripts/Release.ps1
+      - name: Verify clean build reproducibility
+        run: ./scripts/VerifyRelease.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicPlayer-win-x64
+          path: artifacts/release/0.1.0
+          if-no-files-found: error

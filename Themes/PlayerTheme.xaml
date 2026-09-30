@@ -457,6 +457,15 @@
         </Style.Triggers>
     </Style>
     <Style TargetType="ComboBox">
+        <Setter Property="FocusVisualStyle">
+            <Setter.Value>
+                <Style TargetType="Control">
+                    <Setter Property="Template">
+                        <Setter.Value><ControlTemplate><Border BorderBrush="{StaticResource AccentBrush}" BorderThickness="2" CornerRadius="4" Margin="-2" /></ControlTemplate></Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Tag" Value="Choose a playlist" />
         <Setter Property="Background" Value="#2D2D2D" />
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />

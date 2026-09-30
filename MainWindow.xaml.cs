@@ -124,6 +124,8 @@ public partial class MainWindow : Window
     {
         var metadataService = new TagLibMetadataService();
         var musicStore = new SqliteMusicStore();
+        // Fail startup visibly before any view-model fallback can hide a damaged library.
+        musicStore.LoadLibrary();
         return new MainViewModel(
             new FilePickerService(),
             new FolderPickerService(),

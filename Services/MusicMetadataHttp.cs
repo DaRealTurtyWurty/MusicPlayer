@@ -41,8 +41,9 @@ internal static class MusicMetadataHttp
             await host.Gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                var delay = host.NextRequest - DateTimeOffset.UtcNow;
-                if (delay > TimeSpan.Zero) await Task.Delay(delay, token).ConfigureAwait(false);
+                // Recheck after waking: timer granularity can otherwise send a Retry-After request early.
+                while (host.NextRequest - DateTimeOffset.UtcNow is var delay && delay > TimeSpan.Zero)
+                    await Task.Delay(TimeSpan.FromMilliseconds(Math.Ceiling(delay.TotalMilliseconds)), token).ConfigureAwait(false);
                 host.NextRequest = DateTimeOffset.UtcNow + host.Interval;
                 using var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 request.Headers.UserAgent.ParseAdd("MusicPlayer/1.0 (https://github.com/DaRealTurtyWurty/MusicPlayer)");

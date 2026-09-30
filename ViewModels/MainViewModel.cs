@@ -205,7 +205,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             AddLibraryTracks([track], explicitlyAdded: true);
             LoadTrack(track, playImmediately: false);
         }
-        catch (Exception ex) { PlaybackError = $"Could not open audio file: {ex.Message}"; }
+        catch (Exception ex) { System.Diagnostics.Trace.TraceError($"Playback failed: {ex}"); PlaybackError = $"Could not open audio file: {ex.Message}"; }
     }
 
     [RelayCommand]

@@ -50,6 +50,7 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceError($"Library load failed: {ex}");
             _canSaveLibrary = false;
             LibraryError = $"Could not load saved library: {ex.Message}";
         }
@@ -219,7 +220,7 @@ public partial class MainViewModel
             if (result.SkippedCount > 0) message += $" Skipped {result.SkippedCount} missing, unsupported, or unreadable entries.";
             ShowToast(message);
         }
-        catch (Exception ex) { LibraryError = $"Could not add music: {ex.Message}"; }
+        catch (Exception ex) { System.Diagnostics.Trace.TraceError($"Music import failed: {ex}"); LibraryError = $"Could not add music: {ex.Message}"; }
         finally
         {
             IsImportingPlaylist = false;

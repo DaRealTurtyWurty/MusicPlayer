@@ -147,6 +147,7 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceError($"Playlist import failed: {ex}");
             PlaylistError = $"{(target is null ? "Could not import playlist" : "Could not add tracks")}: {ex.Message}";
         }
         finally

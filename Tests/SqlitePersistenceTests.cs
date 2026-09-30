@@ -115,6 +115,10 @@ internal static class SqlitePersistenceTests
         var store = new SqliteMusicStore(path);
         Check(store.LoadSession().CurrentTrack is null && store.LoadLibrary().Single().FilePath == a.FilePath,
             "Existing SQLite databases gain playback tables without losing library data");
+        var upgradeBackup = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(path)!, "backups"), "*-upgrade.db").Single();
+        using (var backup = Context(upgradeBackup))
+            Check(backup.Database.GetAppliedMigrations().Count() == 1,
+                "Upgrade backup retains the original schema before migrations run");
         store.SaveSession(new PlaybackSession(a, TimeSpan.FromSeconds(42.75), new[] { b, a, b })
         {
             History = [new(b, false), new(a, true), new(b, true)]

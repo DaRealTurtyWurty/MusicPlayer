@@ -199,7 +199,7 @@
                 <TextBlock DockPanel.Dock="Right" Text="Duration" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                 <TextBlock Text="Tracks" Style="{StaticResource Caption}" VerticalAlignment="Center" />
             </DockPanel>
-            <ListView x:Name="MusicTrackList" Grid.Row="1" ItemsSource="{Binding BrowseTracks}"
+            <ListView x:Name="MusicTrackList" Grid.Row="1" ItemsSource="{Binding BrowseTracks}" AutomationProperties.Name="Album or artist tracks"
                       SelectedItem="{Binding SelectedBrowseTrack, Mode=TwoWay}" SelectionMode="Single"
                       MouseDoubleClick="MusicTrackList_MouseDoubleClick">
                 <ListView.InputBindings>
@@ -207,6 +207,7 @@
                 </ListView.InputBindings>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
                         <Setter Property="Padding" Value="8,7" />
                         <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}" />
                         <Setter Property="ContextMenu" Value="{StaticResource BrowseTrackMenu}" />

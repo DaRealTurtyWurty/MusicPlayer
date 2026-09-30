@@ -319,14 +319,18 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
             if (!_initialized)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_databasePath)!);
+                if (File.Exists(_databasePath) && db.Database.GetPendingMigrations().Any())
+                    DatabaseRecovery.Backup(_databasePath, "upgrade");
                 db.Database.Migrate();
                 ImportLegacyJson(db);
+                DatabaseRecovery.Backup(_databasePath, "startup");
                 _initialized = true;
             }
             return db;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceError($"Database initialization failed: {ex}");
             db.Dispose();
             throw;
         }

@@ -1,5 +1,5 @@
 <Application x:Class="MusicPlayer.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="MainWindow.xaml" ThemeMode="Dark"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ThemeMode="Dark"
              xmlns:icons="clr-namespace:MusicPlayer.Controls" xmlns:converters="clr-namespace:MusicPlayer.Converters">
     <Application.Resources>
         <ResourceDictionary>

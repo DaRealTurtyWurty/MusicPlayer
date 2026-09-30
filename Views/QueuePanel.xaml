@@ -55,7 +55,7 @@
                            Margin="9,0" />
             </Border>
             <Grid Grid.Row="2">
-                <ListBox x:Name="QueueList"
+                <ListBox x:Name="QueueList" AutomationProperties.Name="Playback queue and history"
                          VirtualizingPanel.ScrollUnit="Pixel"
                          SelectedItem="{Binding SelectedQueueEntry, Mode=TwoWay}" SelectionMode="Single"
                          MouseDoubleClick="QueueList_MouseDoubleClick"
@@ -78,6 +78,7 @@
                     </ListBox.InputBindings>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Track.Title}" />
                             <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" />
                             <Setter Property="ContextMenu" Value="{StaticResource QueueContextMenu}" />
                             <EventSetter Event="ContextMenuOpening" Handler="QueueEntry_ContextMenuOpening" />

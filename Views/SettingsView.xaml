@@ -30,7 +30,7 @@
    <TextBlock Text="{Binding LibraryRefreshStatus}" TextWrapping="Wrap" Margin="0,8,0,20" />
    <TextBlock Text="Watched folders" FontSize="18" Margin="0,0,0,8" />
    <TextBlock Text="Added folders discover music in all subfolders. Removing a folder keeps your songs, playlists and files. Known song files are still checked for changes when automatic scanning is enabled." TextWrapping="Wrap" Margin="0,0,0,12" />
-   <ListBox ItemsSource="{Binding WatchedFolders}" SelectedItem="{Binding SelectedWatchedFolder}" MinHeight="100" MaxHeight="240">
+   <ListBox ItemsSource="{Binding WatchedFolders}" SelectedItem="{Binding SelectedWatchedFolder}" MinHeight="100" MaxHeight="240" AutomationProperties.Name="Watched music folders">
     <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="4">
      <TextBlock Text="{Binding Path}" TextWrapping="Wrap" />
      <StackPanel Orientation="Horizontal"><TextBlock Text="Subfolders: " /><TextBlock Text="{Binding IncludeSubdirectories}" />
@@ -43,6 +43,10 @@
    </WrapPanel>
    <TextBlock Text="{Binding SettingsError}" Foreground="#FFB4AB" TextWrapping="Wrap" Margin="0,8,0,0" />
    <TextBlock Text="{Binding LibraryError}" Foreground="#FFB4AB" TextWrapping="Wrap" />
+   <TextBlock Text="Library backup and diagnostics" FontSize="18" Margin="0,24,0,12" />
+   <TextBlock Text="A library snapshot is saved at startup and before database upgrades. Backups contain the library, playlists and playback session; keep a separate backup of your music files." TextWrapping="Wrap" Margin="0,0,0,12" />
+   <Button Content="Back up library now" Click="BackupLibrary_Click" HorizontalAlignment="Left" />
+   <TextBlock x:Name="BackupStatus" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" Margin="0,8,0,0" />
   </StackPanel>
  </ScrollViewer>
 </UserControl>

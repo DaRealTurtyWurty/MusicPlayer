@@ -157,7 +157,7 @@
             </Grid>
         </Border>
         <Grid Grid.Row="3">
-            <ListView x:Name="TrackList" ItemsSource="{Binding LibraryTracks}"
+            <ListView x:Name="TrackList" ItemsSource="{Binding LibraryTracks}" AutomationProperties.Name="Library tracks"
                       SelectedItem="{Binding SelectedTrack, Mode=TwoWay}" SelectionMode="Extended"
                       MouseDoubleClick="TrackList_MouseDoubleClick"
                       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -166,6 +166,7 @@
                 </ListView.InputBindings>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
                         <EventSetter Event="ContextMenuOpening" Handler="Track_ContextMenuOpening" />
                         <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}" />
                         <Setter Property="ContextMenu" Value="{StaticResource TrackContextMenu}" />

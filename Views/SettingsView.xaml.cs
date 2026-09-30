@@ -2,11 +2,28 @@ using System.Windows;
 using System.Windows.Controls;
 using MusicPlayer.Models;
 using MusicPlayer.ViewModels;
+using MusicPlayer.Services;
 
 namespace MusicPlayer.Views;
 
 public partial class SettingsView : UserControl
 {
+    private async void BackupLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+        button.IsEnabled = false;
+        try
+        {
+            var path = await Task.Run(() => DatabaseRecovery.Backup(SqliteMusicStore.DefaultDatabasePath));
+            BackupStatus.Text = $"Backup saved to {path}";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceError($"Manual backup failed: {ex}");
+            BackupStatus.Text = "Backup failed. Check the diagnostic logs in %LOCALAPPDATA%\\MusicPlayer\\logs.";
+        }
+        finally { button.IsEnabled = true; }
+    }
     public SettingsView()
     {
         InitializeComponent();

@@ -32,6 +32,7 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
+            Trace.TraceError($"Playback session restore failed: {ex}");
             // Preserve an unreadable session instead of overwriting it with an empty queue.
             PlaybackError = $"Could not restore playback session: {ex.Message}";
         }

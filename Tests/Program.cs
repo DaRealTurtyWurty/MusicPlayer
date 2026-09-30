@@ -8,9 +8,21 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--release-readiness-smoke"])
+        {
+            SqlitePersistenceTests.Run();
+            CheckDatabaseRecovery();
+            CheckDiagnosticLogs();
+            var releaseApp = new App(suppressStartup: true);
+            releaseApp.InitializeComponent();
+            releaseApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckReleaseAccessibility();
+            Console.WriteLine("Release readiness regressions passed.");
+            return;
+        }
         if (args is ["--settings-smoke"])
         {
-            var settingsApp = new App();
+            var settingsApp = new App(suppressStartup: true);
             settingsApp.InitializeComponent();
             settingsApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             CheckDiscordSettingsLayout();
@@ -21,7 +33,7 @@ internal static partial class Program
         }
         if (args is ["--library-workflows-smoke"])
         {
-            var workflowApp = new App();
+            var workflowApp = new App(suppressStartup: true);
             workflowApp.InitializeComponent();
             workflowApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             CheckLibraryWorkflows();
@@ -36,7 +48,7 @@ internal static partial class Program
         }
         if (args is ["--audio-smoke"] or ["--audio-device-live"])
         {
-            var audioApp = new App();
+            var audioApp = new App(suppressStartup: true);
             audioApp.InitializeComponent();
             audioApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(args[0] == "--audio-smoke" ? CheckAudioAsync : CheckAudioDeviceLiveAsync);
@@ -49,7 +61,7 @@ internal static partial class Program
         }
         if (args is ["--queue-smoke"])
         {
-            var queueApp = new App();
+            var queueApp = new App(suppressStartup: true);
             queueApp.InitializeComponent();
             queueApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             CheckQueueHistory();
@@ -74,7 +86,7 @@ internal static partial class Program
             DispatcherTest.Run(CheckDiscordPresenceAsync);
             DispatcherTest.Run(CheckDiscordRpcTransportAsync);
             DispatcherTest.Run(CheckDiscordArtworkRecoveryAsync);
-            var discordApp = new App();
+            var discordApp = new App(suppressStartup: true);
             discordApp.InitializeComponent();
             discordApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             CheckDiscordSettingsLayout();
@@ -82,7 +94,7 @@ internal static partial class Program
         }
         if (args is ["--embedded-lyrics-smoke"])
         {
-            var embeddedApp = new App();
+            var embeddedApp = new App(suppressStartup: true);
             embeddedApp.InitializeComponent();
             embeddedApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckEmbeddedLyricsViewModelAsync);
@@ -90,7 +102,7 @@ internal static partial class Program
         }
         if (args is ["--lyricsfile-smoke"])
         {
-            var lyricsfileApp = new App();
+            var lyricsfileApp = new App(suppressStartup: true);
             lyricsfileApp.InitializeComponent();
             lyricsfileApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckLyricsfileViewAsync);
@@ -98,7 +110,7 @@ internal static partial class Program
         }
         if (args is ["--ttml-smoke"])
         {
-            var ttmlApp = new App();
+            var ttmlApp = new App(suppressStartup: true);
             ttmlApp.InitializeComponent();
             ttmlApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckTtmlVocalsAsync);
@@ -106,7 +118,7 @@ internal static partial class Program
         }
         if (args is ["--lyrics-enhanced-smoke"])
         {
-            var enhancedApp = new App();
+            var enhancedApp = new App(suppressStartup: true);
             enhancedApp.InitializeComponent();
             enhancedApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckEnhancedLyricsAsync);
@@ -114,7 +126,7 @@ internal static partial class Program
         }
         if (args is ["--lyrics-view-smoke"])
         {
-            var lyricsApp = new App();
+            var lyricsApp = new App(suppressStartup: true);
             lyricsApp.InitializeComponent();
             lyricsApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckLyricsViewAsync);
@@ -137,7 +149,7 @@ internal static partial class Program
         }
         if (args is ["--artist-photo-smoke"] or ["--artist-photo-live"] or ["--artist-deezer-live"] or ["--artist-custom-smoke"] or ["--artist-deezer-search-smoke"])
         {
-            var photoApp = new App();
+            var photoApp = new App(suppressStartup: true);
             photoApp.InitializeComponent();
             photoApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(args[0] switch
@@ -178,7 +190,7 @@ internal static partial class Program
         }
         if (args is ["--gallery-performance"])
         {
-            var galleryApp = new App();
+            var galleryApp = new App(suppressStartup: true);
             galleryApp.InitializeComponent();
             galleryApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckGalleryPerformanceAsync);
@@ -188,7 +200,7 @@ internal static partial class Program
         {
             TemporaryTestDirectoryTests.Run();
             DispatcherTest.Run(PlaylistImportTests.RunAsync);
-            var artworkApp = new App();
+            var artworkApp = new App(suppressStartup: true);
             artworkApp.InitializeComponent();
             artworkApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             CheckRestoredPlaylistArtwork();
@@ -197,7 +209,7 @@ internal static partial class Program
         }
         if (args is ["--release-type-smoke"])
         {
-            var releaseApp = new App();
+            var releaseApp = new App(suppressStartup: true);
             releaseApp.InitializeComponent();
             releaseApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckReleaseTypesAsync);
@@ -205,7 +217,7 @@ internal static partial class Program
         }
         if (args is ["--music-browser-smoke"])
         {
-            var browserApp = new App();
+            var browserApp = new App(suppressStartup: true);
             browserApp.InitializeComponent();
             browserApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckMusicBrowserAsync);
@@ -213,7 +225,7 @@ internal static partial class Program
         }
         if (args is ["--taskbar-smoke"])
         {
-            var taskbarApp = new App();
+            var taskbarApp = new App(suppressStartup: true);
             taskbarApp.InitializeComponent();
             taskbarApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
             DispatcherTest.Run(CheckTaskbarPreviewAsync);
@@ -320,7 +332,7 @@ internal static partial class Program
         DispatcherTest.Run(LibraryRefreshTests.RunAsync);
 
         // Load the compiled XAML and exercise its bindings/layout without audio hardware.
-        var app = new App();
+        var app = new App(suppressStartup: true);
         app.InitializeComponent();
         app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
         DispatcherTest.Run(CheckAudioAsync);
