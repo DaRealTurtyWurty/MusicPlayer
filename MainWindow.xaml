@@ -24,6 +24,7 @@
             <views:NowPlayingView />
         </DataTemplate>
         <DataTemplate x:Key="SettingsPageTemplate"><views:SettingsView /></DataTemplate>
+        <DataTemplate x:Key="HistoryPageTemplate"><views:HistoryView /></DataTemplate>
     </Window.Resources>
     <Grid x:Name="RootLayout">
         <Border x:Name="NotificationToast" Panel.ZIndex="5" HorizontalAlignment="Right" VerticalAlignment="Bottom"
@@ -105,6 +106,14 @@
                                     <TextBlock Text="Now Playing" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                 </StackPanel>
                             </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="{x:Static models:AppPage.History}"
+                                    Style="{StaticResource HistoryNavigationButton}" AutomationProperties.Name="History" Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <icons:LucideIcon Geometry="M3 12 A9 9 0 1 0 5.64 5.64 L3 8 M3 3 L3 8 L8 8 M12 7 L12 12 L16 14"
+                                                      Width="16" Height="16" Margin="0,0,8,0" />
+                                    <TextBlock Text="History" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
                             <Button Command="{Binding NavigateCommand}" CommandParameter="{x:Static models:AppPage.Settings}"
                                     Style="{StaticResource SettingsNavigationButton}" AutomationProperties.Name="Settings" Margin="4,0,0,0">
                                 <StackPanel Orientation="Horizontal">
@@ -130,6 +139,7 @@
                             <Setter Property="ContentTemplate" Value="{StaticResource LibraryPageTemplate}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedPage}" Value="Settings"><Setter Property="ContentTemplate" Value="{StaticResource SettingsPageTemplate}" /></DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedPage}" Value="History"><Setter Property="ContentTemplate" Value="{StaticResource HistoryPageTemplate}" /></DataTrigger>
                                 <DataTrigger Binding="{Binding SelectedPage}" Value="Albums">
                                     <Setter Property="ContentTemplate" Value="{StaticResource MusicBrowserPageTemplate}" />
                                 </DataTrigger>

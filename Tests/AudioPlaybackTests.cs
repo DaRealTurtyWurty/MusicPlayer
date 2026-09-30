@@ -313,10 +313,12 @@ internal static partial class Program
         var outputs = backend.Outputs.Count;
         output.ReadAhead(player.Duration + TimeSpan.FromMilliseconds(50));
         Check(vm.CurrentTrack == first && vm.Queue.Count == 1, "Decoder read-ahead does not advance the visible queue");
+        Check(vm.ListeningHistory.Count == 1 && second.PlayCount == 0, "Gapless preloading does not count an inaudible next song");
         output.RenderedPosition = TimeSpan.FromSeconds(2.05);
         await Task.Delay(40);
         Check(vm.CurrentTrack == second && vm.IsQueueEmpty && vm.IsPlaying && backend.Outputs.Count == outputs && !output.Disposed,
             "Audible gapless transition advances metadata and queue without restarting output");
+        Check(vm.ListeningHistory.Count == 2 && second.PlayCount == 1, "Gapless transition records one play for the audible incoming song");
         Check(player.PresentationPosition.TotalSeconds is >= 0 and < .1, "Gapless transition resets the per-track presentation clock");
         vm.Queue.Add(third);
         output.ReadAhead(TimeSpan.FromSeconds(2));
@@ -331,6 +333,7 @@ internal static partial class Program
         await Task.Delay(40);
         Check(vm.CurrentTrack == second && vm.IsPlaying && backend.Outputs.Count == outputs,
             "Repeat-one continues on the same output");
+        Check(vm.ListeningHistory.Count == 3 && second.PlayCount == 2, "Gapless repeat-one records another play without changing track identity");
         vm.PauseCommand.Execute(null);
         Check(!vm.IsPlaying, "Pause after a gapless transition stays paused");
         player.Seek(TimeSpan.FromSeconds(.5));

@@ -24,6 +24,7 @@ internal interface IPlaybackState
     void Next();
     void RefreshLyricsPosition();
     void SetPositionFromOutput(double seconds);
+    void ListeningStarted(Track track);
 }
 
 internal sealed class PlaybackCoordinator : IDisposable
@@ -31,6 +32,14 @@ internal sealed class PlaybackCoordinator : IDisposable
     private readonly IPlaybackState _state;
     private readonly IAudioPlayer _audioPlayer;
     private readonly IMetadataService _metadataService;
+    private bool _listenRecorded;
+
+    public void RecordPlaybackStart()
+    {
+        if (_listenRecorded || !_state.IsPlaying || !OutputIsPlaying || _state.CurrentTrack is not { } track) return;
+        _listenRecorded = true;
+        _state.ListeningStarted(track);
+    }
 
     public PlaybackCoordinator(IPlaybackState state, IAudioPlayer audioPlayer, IMetadataService metadataService)
     {
@@ -65,11 +74,16 @@ internal sealed class PlaybackCoordinator : IDisposable
 
         if (!TryPlaybackAction(() =>
             {
-                if (_audioPlayer.Position >= _audioPlayer.Duration) _audioPlayer.Seek(TimeSpan.Zero);
+                if (_audioPlayer.Position >= _audioPlayer.Duration)
+                {
+                    _audioPlayer.Seek(TimeSpan.Zero);
+                    _listenRecorded = false;
+                }
                 _audioPlayer.Play();
             })) return;
         _state.IsPlaybackStopped = false;
         _state.IsPlaying = OutputIsPlaying;
+        RecordPlaybackStart();
     }
 
     public bool LoadTrack(Track track, bool playImmediately, bool rememberCurrent = true)
@@ -90,7 +104,11 @@ internal sealed class PlaybackCoordinator : IDisposable
                 }
             }
 
+            // Reloading a relocated current file continues its existing listening occurrence.
+            var continuingListen = !rememberCurrent && _state.ReloadCurrentTrack && previous is not null &&
+                StringComparer.OrdinalIgnoreCase.Equals(previous.FilePath, track.FilePath);
             _audioPlayer.Load(track.FilePath);
+            if (!continuingListen) _listenRecorded = false;
             _state.ReloadCurrentTrack = false;
             _state.CurrentTrack = track;
             _state.PlaybackError = null;
@@ -103,6 +121,7 @@ internal sealed class PlaybackCoordinator : IDisposable
                 _audioPlayer.Play();
             _state.IsPlaybackStopped = false;
             _state.IsPlaying = playImmediately && OutputIsPlaying;
+            RecordPlaybackStart();
             if (rememberCurrent)
                 _state.RememberTrack(previous);
             return true;
@@ -132,6 +151,7 @@ internal sealed class PlaybackCoordinator : IDisposable
         _state.IsPlaybackStopped = true;
         _state.IsPlaying = false;
         _state.PositionSeconds = 0;
+        _listenRecorded = false;
     }
 
     private void OnPlaybackEnded(object? sender, EventArgs e)
@@ -213,6 +233,7 @@ internal sealed class PlaybackCoordinator : IDisposable
                 _state.RememberTrack(previous, recycled);
             }
             _state.CurrentTrack = next;
+            _listenRecorded = false;
             _state.Lyrics.SetTrack(next, _audioPlayer.Duration);
             _state.ReloadCurrentTrack = false;
             _state.PlaybackError = null;
@@ -220,6 +241,7 @@ internal sealed class PlaybackCoordinator : IDisposable
             _state.SetPositionFromOutput(_audioPlayer.PresentationPosition.TotalSeconds);
             _state.IsPlaybackStopped = false;
             _state.IsPlaying = OutputIsPlaying;
+            RecordPlaybackStart();
             _state.RefreshLyricsPosition();
         }
         finally { _committingGapless = false; }

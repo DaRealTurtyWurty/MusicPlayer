@@ -1,7 +1,14 @@
 ﻿namespace MusicPlayer.Models;
 
-public sealed class Track
+public sealed class Track : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
 {
+    private long _playCount;
+    public long PlayCount
+    {
+        get => _playCount;
+        set { if (SetProperty(ref _playCount, value)) OnPropertyChanged(nameof(PlayCountText)); }
+    }
+    public string PlayCountText => $"{PlayCount} {(PlayCount == 1 ? "play" : "plays")}";
     public required string FilePath { get; init; }
 
     public required string Title { get; init; }
@@ -40,7 +47,7 @@ public sealed class Track
         MusicBrainzReleaseGroupId = MusicBrainzReleaseGroupId,
         MusicBrainzArtistId = MusicBrainzArtistId, MetadataVersion = MetadataVersion,
         ArtworkData = ArtworkData, FileSize = size, LastWriteTimeUtcTicks = modified, IsMissing = missing,
-        ExplicitlyAddedToLibrary = ExplicitlyAddedToLibrary
+        ExplicitlyAddedToLibrary = ExplicitlyAddedToLibrary, PlayCount = PlayCount
     };
 
     public string DurationText =>

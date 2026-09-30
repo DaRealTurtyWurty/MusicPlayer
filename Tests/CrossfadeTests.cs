@@ -58,11 +58,14 @@ internal static partial class Program
         var output = backend.Last!;
         output.ReadAhead(TimeSpan.FromSeconds(2.1));
         Check(vm.CurrentTrack == first && vm.Queue.Count == 1, "Crossfade read-ahead does not consume the visible queue");
+        Check(vm.ListeningHistory.Count == 1 && first.PlayCount == 1 && second.PlayCount == 0,
+            "Buffered crossfade audio does not count the incoming song before its audible transition");
         output.RenderedPosition = TimeSpan.FromSeconds(2.05);
         await Task.Delay(40);
         Check(vm.CurrentTrack == second && vm.IsQueueEmpty && !output.Disposed && vm.IsPlaying
             && player.PresentationPosition.TotalSeconds is > 1 and < 1.1,
             "Crossfade overrides disabled gapless and advances the clock by the consumed overlap");
+        Check(vm.ListeningHistory.Count == 2 && second.PlayCount == 1, "Audible crossfade transition records exactly one incoming play");
         vm.PauseCommand.Execute(null);
         player.Seek(TimeSpan.FromSeconds(.5));
         Check(!player.IsOutputPlaying && Math.Abs(player.PresentationPosition.TotalSeconds - .5) < .01,

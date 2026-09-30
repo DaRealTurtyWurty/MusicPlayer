@@ -143,6 +143,7 @@
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="1.3*" />
                     <ColumnDefinition Style="{StaticResource AlbumColumn}" />
+                    <ColumnDefinition Width="64" />
                     <ColumnDefinition Width="48" />
                     <ColumnDefinition Width="36" />
                 </Grid.ColumnDefinitions>
@@ -152,7 +153,9 @@
                            Margin="12,0,0,0" VerticalAlignment="Center" />
                 <TextBlock x:Name="AlbumHeader" Grid.Column="2" Text="Album" Style="{StaticResource AlbumText}" Margin="12,0,0,0"
                            VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="Duration" Style="{StaticResource Caption}" HorizontalAlignment="Right"
+                <TextBlock Grid.Column="3" Text="Plays" Style="{StaticResource Caption}" HorizontalAlignment="Right"
+                           VerticalAlignment="Center" Margin="0,0,12,0" />
+                <TextBlock Grid.Column="4" Text="Duration" Style="{StaticResource Caption}" HorizontalAlignment="Right"
                            VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -180,6 +183,7 @@
                                 <ColumnDefinition Width="2*" />
                                 <ColumnDefinition Width="1.3*" />
                                 <ColumnDefinition Style="{StaticResource AlbumColumn}" />
+                                <ColumnDefinition Width="64" />
                                 <ColumnDefinition Width="48" />
                                 <ColumnDefinition Width="36" />
                             </Grid.ColumnDefinitions>
@@ -199,10 +203,12 @@
                                        Style="{StaticResource AlbumText}" FontSize="12"
                                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0,8,0"
                                        Foreground="{StaticResource MutedBrush}" />
-                            <TextBlock Grid.Column="3" Text="{Binding DurationText}" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="3" Text="{Binding PlayCount}" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                       Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="4" Text="{Binding DurationText}" VerticalAlignment="Center"
                                        HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}"
                                        FontSize="12" />
-                            <Button Grid.Column="4" Content="⋯" Style="{StaticResource QuietButton}"
+                            <Button Grid.Column="5" Content="⋯" Style="{StaticResource QuietButton}"
                                     Width="28" Height="28" MinHeight="28" Padding="0" Margin="8,0,0,0"
                                     FontSize="18" Click="TrackActions_Click"
                                     PreviewMouseDoubleClick="TrackActions_PreviewMouseDoubleClick"

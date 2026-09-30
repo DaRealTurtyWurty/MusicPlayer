@@ -42,6 +42,7 @@ public partial class MainViewModel
 
     partial void OnCurrentTrackChanged(Track? value)
     {
+        if (value is not null) ApplyPlayCount(value);
         Lyrics.SetTrack(value, _audioPlayer.Duration);
         RefreshTimelineHistory();
         if (_canSaveSession) _sessionDirty = true;

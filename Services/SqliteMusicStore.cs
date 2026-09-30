@@ -10,7 +10,7 @@ namespace MusicPlayer.Services;
 /// Shared library/playlist storage. Each operation owns its context and transaction;
 /// UI and import worker threads never share an EF change tracker.
 /// </summary>
-public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackSessionStore, ILibraryMaintenanceStore, ILibraryMembershipStore, IReleaseTypeStore, IArtistIdentityStore
+public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackSessionStore, ILibraryMaintenanceStore, ILibraryMembershipStore, IReleaseTypeStore, IArtistIdentityStore, IListeningHistoryStore
 {
     private const string LegacyImportKey = "LegacyJsonImported";
     private readonly object _gate = new();
@@ -46,6 +46,45 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
             return db.Tracks.AsNoTracking()
                 .Where(t => t.ExplicitlyAddedToLibrary || db.PlaylistEntries.Any(e => e.TrackId == t.Id))
                 .OrderBy(t => t.Id).AsEnumerable().Select(ToTrack).ToArray();
+        }
+    }
+
+    public IReadOnlyList<ListeningHistoryEntry> LoadListeningHistory(int limit = 500)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+        lock (_gate)
+        {
+            using var db = Open();
+            return db.Listens.AsNoTracking().Include(e => e.Track)
+                .OrderByDescending(e => e.PlayedAtUtcTicks).ThenByDescending(e => e.Id).Take(limit)
+                .AsEnumerable().Select(e => new ListeningHistoryEntry(e.Id, ToTrack(e.Track),
+                    new DateTimeOffset(e.PlayedAtUtcTicks, TimeSpan.Zero))).ToArray();
+        }
+    }
+
+    public ListeningHistoryEntry RecordListen(Track track, DateTimeOffset playedAt)
+    {
+        lock (_gate)
+        {
+            using var db = Open();
+            using var transaction = db.Database.BeginTransaction();
+            var stored = UpsertTracks(db, [track])[TrackKey(track)];
+            stored.PlayCount = checked(stored.PlayCount + 1);
+            var entry = new StoredListen { Track = stored, PlayedAtUtcTicks = playedAt.UtcTicks };
+            db.Listens.Add(entry);
+            db.SaveChanges();
+            transaction.Commit();
+            return new ListeningHistoryEntry(entry.Id, ToTrack(stored), playedAt.ToUniversalTime());
+        }
+    }
+
+    public IReadOnlyDictionary<string, long> LoadPlayCounts()
+    {
+        lock (_gate)
+        {
+            using var db = Open();
+            return db.Tracks.AsNoTracking().Where(t => t.PlayCount > 0)
+                .ToDictionary(t => t.PathKey, t => t.PlayCount, StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -295,6 +334,8 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
             if (duplicate is not null)
             {
                 original.ExplicitlyAddedToLibrary |= duplicate.ExplicitlyAddedToLibrary;
+                original.PlayCount = checked(original.PlayCount + duplicate.PlayCount);
+                db.Listens.Where(e => e.TrackId == duplicate.Id).ExecuteUpdate(s => s.SetProperty(e => e.TrackId, original.Id));
                 // Keep the original identity and merge any already-imported destination references.
                 db.PlaylistEntries.Where(e => e.TrackId == duplicate.Id).ExecuteUpdate(s => s.SetProperty(e => e.TrackId, original.Id));
                 db.QueueEntries.Where(e => e.TrackId == duplicate.Id).ExecuteUpdate(s => s.SetProperty(e => e.TrackId, original.Id));
@@ -444,6 +485,7 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
 
     private static Track ToTrack(StoredTrack track) => new()
     {
+        PlayCount = track.PlayCount,
         FilePath = track.FilePath, Title = track.Title, Artist = track.Artist,
         Album = track.Album, Duration = TimeSpan.FromTicks(track.DurationTicks),
         AlbumArtist = track.AlbumArtist, MusicBrainzReleaseId = track.MusicBrainzReleaseId,

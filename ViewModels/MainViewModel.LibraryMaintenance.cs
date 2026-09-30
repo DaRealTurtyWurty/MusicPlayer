@@ -208,6 +208,7 @@ public partial class MainViewModel
                 [LibraryTrackKey(replacement.FilePath)] = replacement
             });
             if (currentRelocated) _reloadCurrentTrack = true;
+            RefreshListeningHistory();
             LocateStatus = $"Located {replacement.Title}.";
             ScheduleLibraryRefresh();
         }
@@ -256,7 +257,12 @@ public partial class MainViewModel
     {
         if (updates.Count == 0) return;
         _library.UpdateCatalog(updates);
-        Track Replace(Track track) => updates.TryGetValue(LibraryTrackKey(track.FilePath), out var updated) ? updated : track;
+        Track Replace(Track track)
+        {
+            var result = updates.TryGetValue(LibraryTrackKey(track.FilePath), out var updated) ? updated : track;
+            ApplyPlayCount(result);
+            return result;
+        }
         var selected = SelectedTrack is { } selection ? Replace(selection) : null;
         var queueIndex = SelectedQueueIndex;
         var playlistIndex = SelectedPlaylistTrackIndex;

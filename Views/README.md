@@ -1,5 +1,16 @@
 # App views
 
+Listening history is separate from the queue's Previous history. The History page displays the latest 500 plays,
+newest first, with local timestamps and replay controls; SQLite retains all occurrences. A successful playback start
+counts once. Pause/resume, seeking, loading a paused session, and preparing buffered audio do not add plays.
+Stopping and starting again, replaying a song, repeating, and audible gapless/crossfade transitions add a new play.
+The Library shows lifetime play counts and supports PlayCount sorting. History and counts survive new queue sessions,
+metadata refreshes, app restarts, and relinking (including merging an already-imported destination).
+Counts start at zero on upgrade; the older queue history has no timestamps and is not backfilled.
+History insertion and count increment commit together; a failed write reports an error on the History page.
+Run `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --listening-history-smoke` for migration,
+playback/counting, restart, write rollback, relinking, crossfade, and minimum-window layout checks.
+
 `MainWindow` owns the navigation, queue, and bottom player. Its content host switches between `LibraryView`,
 `PlaylistsView`, and `NowPlayingView`; playback stays in the shared `MainViewModel` so changing pages does not interrupt
 it.

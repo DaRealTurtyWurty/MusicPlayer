@@ -5,6 +5,7 @@ namespace MusicPlayer.Services.Persistence;
 public sealed class MusicDbContext(DbContextOptions<MusicDbContext> options) : DbContext(options)
 {
     public DbSet<StoredTrack> Tracks => Set<StoredTrack>();
+    public DbSet<StoredListen> Listens => Set<StoredListen>();
     public DbSet<StoredReleaseType> ReleaseTypes => Set<StoredReleaseType>();
     public DbSet<StoredArtistIdentity> ArtistIdentities => Set<StoredArtistIdentity>();
     public DbSet<StoredMusicFolder> MusicFolders => Set<StoredMusicFolder>();
@@ -17,6 +18,13 @@ public sealed class MusicDbContext(DbContextOptions<MusicDbContext> options) : D
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<StoredListen>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.PlayedAtUtcTicks);
+            entity.HasOne(e => e.Track).WithMany().HasForeignKey(e => e.TrackId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<StoredMusicFolder>().HasKey(f => f.PathKey);
         modelBuilder.Entity<StoredReleaseType>().HasKey(r => r.ReleaseKey);
         modelBuilder.Entity<StoredArtistIdentity>().HasKey(r => r.LookupKey);
@@ -77,6 +85,7 @@ public sealed class MusicDbContext(DbContextOptions<MusicDbContext> options) : D
 
 public sealed class StoredTrack
 {
+    public long PlayCount { get; set; }
     public long Id { get; set; }
     public required string PathKey { get; set; }
     public required string FilePath { get; set; }
@@ -98,6 +107,14 @@ public sealed class StoredTrack
     public long? LastWriteTimeUtcTicks { get; set; }
     public bool IsMissing { get; set; }
     public bool ExplicitlyAddedToLibrary { get; set; }
+}
+
+public sealed class StoredListen
+{
+    public long Id { get; set; }
+    public long TrackId { get; set; }
+    public StoredTrack Track { get; set; } = null!;
+    public long PlayedAtUtcTicks { get; set; }
 }
 
 public sealed class StoredArtistIdentity

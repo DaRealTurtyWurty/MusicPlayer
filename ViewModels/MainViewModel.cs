@@ -152,7 +152,8 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
         IFileLocationService? fileLocationService = null,
         IArtistIdentityService? artistIdentityService = null,
         IArtistPhotoService? artistPhotoService = null,
-        ILocalLyricsSource? lyricsSource = null)
+        ILocalLyricsSource? lyricsSource = null,
+        IListeningHistoryStore? listeningHistoryStore = null)
     {
         _filePickerService = filePickerService;
         _folderPickerService = folderPickerService;
@@ -196,6 +197,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
         _artistIdentityService = artistIdentityService;
         ArtistPhotoService = artistPhotoService;
         InitializeMusicBrowser(releaseTypeStore);
+        InitializeListeningHistory(listeningHistoryStore ?? libraryStore as IListeningHistoryStore ?? playbackSessionStore as IListeningHistoryStore);
     }
 
     [RelayCommand]
@@ -360,6 +362,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
 
     private void OnPositionTimerTick(object? sender, EventArgs e)
     {
+        _playback.RecordPlaybackStart();
         _updatingPosition = true;
 
         PositionSeconds = _audioPlayer.Position.TotalSeconds;
@@ -386,6 +389,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
 
     public void Dispose()
     {
+        Tracks.CollectionChanged -= OnListeningTracksChanged;
         Lyrics.SeekRequested -= SeekToLyrics;
         Lyrics.Dispose();
         DisposeMusicBrowser();

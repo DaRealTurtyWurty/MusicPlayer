@@ -302,11 +302,11 @@
         </Setter>
     </Style>
     <Style x:Key="NavigationButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="MinWidth" Value="120" />
+        <Setter Property="MinWidth" Value="104" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
-        <Setter Property="Padding" Value="16,7" />
+        <Setter Property="Padding" Value="12,7" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Template">
             <Setter.Value>
@@ -376,6 +376,15 @@
     <Style x:Key="NowPlayingNavigationButton" TargetType="Button" BasedOn="{StaticResource NavigationButton}">
         <Style.Triggers>
             <DataTrigger Binding="{Binding SelectedPage}" Value="NowPlaying">
+                <Setter Property="Background" Value="#3B4B5B" />
+                <Setter Property="BorderBrush" Value="#596B7E" />
+                <Setter Property="Foreground" Value="#EEF5FC" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="HistoryNavigationButton" TargetType="Button" BasedOn="{StaticResource NavigationButton}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding SelectedPage}" Value="History">
                 <Setter Property="Background" Value="#3B4B5B" />
                 <Setter Property="BorderBrush" Value="#596B7E" />
                 <Setter Property="Foreground" Value="#EEF5FC" />

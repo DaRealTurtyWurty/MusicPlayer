@@ -8,6 +8,16 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--listening-history-smoke"])
+        {
+            var historyApp = new App(suppressStartup: true);
+            historyApp.InitializeComponent();
+            historyApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckListeningHistory();
+            DispatcherTest.Run(CheckGaplessAsync);
+            DispatcherTest.Run(CheckCrossfadeAsync);
+            return;
+        }
         if (args is ["--audio-file-profile", var audioPath])
         {
             CheckAudioFileProfile(audioPath);
@@ -368,6 +378,7 @@ internal static partial class Program
         DispatcherTest.Run(CheckLibraryMembershipAsync);
         CheckVolume(args.Length > 0 ? args[0] + ".volume.png" : null);
         CheckQueueVisibility();
+        CheckListeningHistory();
         CheckQueueHistory();
         CheckClearQueueConfirmation();
         CheckDeletePlaylistConfirmation();
