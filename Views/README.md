@@ -196,3 +196,26 @@ leave playback and the queue intact.
 Import progress is reported during file discovery and track reading, at most every 100 ms plus stage transitions and
 completion. The shared window shows discovery activity, then a determinate progress bar with the processed count, total,
 current file, and skipped count. Progress remains visible when switching pages and disappears on completion or failure.
+
+
+Library and playlist organization supports Ctrl/Shift multiselection. The Library toolbar plays, queues, or adds
+selected tracks to another playlist in the displayed sort order. Playlist selection offers queue, add to another
+playlist, remove, and manual Move up/down; Delete and Alt+Up/Down also apply to the selection. Duplicate occurrences
+remain independently selectable. Rename uses the existing name editor, with Enter to save and Escape to cancel;
+a failed save keeps the editor open. Export M3U8 writes UTF-8 extended playlists with relative paths, preserving
+order and duplicates. Export references the original music files rather than copying them.
+
+Library sorting supports artist, title, album, year, duration, and file path, with a saved descending toggle.
+Search requires all words to match; quoted phrases and title:, artist:, album:, albumartist:, genre:, year:, path:,
+and missing: prefixes narrow individual terms. For example: `artist:"Miles Davis" genre:jazz`.
+
+Settings manages registered watched folders and the saved automatic-scanning toggle. Add folder registers recursive
+discovery and immediately scans; removing a folder stops discovery under that root while retaining songs and
+playlist entries. Known song directories still receive availability/metadata checks without discovering new songs.
+Manual Rescan remains available with automatic scanning disabled. Run the focused checks with
+`dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --library-workflows-smoke`.
+
+Settings follows Now Playing in the navigation and contains audio output selection, Discord presence configuration,
+and library scanning controls. The volume popup provides mute and volume adjustment. Discord options are applied
+with Save Discord settings; invalid application IDs keep sharing disabled. Audio output changes apply immediately.
+Run the focused UI checks with `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --settings-smoke`.

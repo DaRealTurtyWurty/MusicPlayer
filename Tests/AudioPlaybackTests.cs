@@ -242,13 +242,13 @@ internal static partial class Program
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), new NAudioPlayer(new TestAudioBackend()), monitorLibrary: false);
         var window = new MainWindow(vm);
         window.Show();
-        var popup = (System.Windows.Controls.Primitives.Popup)window.FindName("VolumePopup");
-        popup.IsOpen = true;
+        vm.SelectedPage = AppPage.Settings;
         window.UpdateLayout();
-        var selector = (System.Windows.Controls.ComboBox)window.FindName("AudioOutputSelector");
+        var settings = Descendants(window).OfType<MusicPlayer.Views.SettingsView>().Single();
+        var selector = (System.Windows.Controls.ComboBox)settings.FindName("AudioOutputSelector");
         Check(selector.Items.Count == 3 && selector.SelectedItem is AudioOutputDevice { Id: null } && selector.ActualWidth > 100,
-            "Output selector binds default and named endpoints in volume popup");
-        var content = (System.Windows.FrameworkElement)popup.Child;
+            "Output selector binds default and named endpoints in Settings");
+        var content = (System.Windows.FrameworkElement)settings.Content;
         content.UpdateLayout();
         var image = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth,
             (int)content.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
@@ -259,7 +259,8 @@ internal static partial class Program
         using (var stream = File.Create("artifacts/audio-output.png")) encoder.Save(stream);
         selector.SelectedIndex = 2;
         Check(vm.SelectedAudioOutputDevice?.Id == "B", "Output selection updates the player binding");
-        popup.IsOpen = false;
+        Check(window.FindName("AudioOutputSelector") is null,
+            "The volume popup no longer owns an audio output selector");
         window.Close();
     }
 

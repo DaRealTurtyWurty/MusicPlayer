@@ -42,6 +42,17 @@ public partial class MainViewModel
 
     public ObservableCollection<Playlist> Playlists { get; } = [];
 
+    // Give repeated references distinct row identities so virtualized multiselection
+    // can select an occurrence without selecting every copy of the same song.
+    public IReadOnlyList<Track> PlaylistTrackRows { get; private set; } = [];
+    private void RefreshPlaylistTrackRows()
+    {
+        var seen = new HashSet<Track>();
+        PlaylistTrackRows = SelectedPlaylist?.Tracks.Select(t => seen.Add(t) ? t :
+            t.WithFileState(t.FileSize, t.LastWriteTimeUtcTicks, t.IsMissing)).ToArray() ?? [];
+        OnPropertyChanged(nameof(PlaylistTrackRows));
+    }
+
     private void InitializePages(IPlaylistStore? playlistStore)
     {
         _playlistStore = playlistStore;
@@ -124,10 +135,12 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanRenamePlaylist))]
     private void RenamePlaylist()
     {
-        SelectedPlaylist!.Name = PlaylistName.Trim();
+        var original = SelectedPlaylist!.Name;
+        SelectedPlaylist.Name = PlaylistName.Trim();
         PlaylistName = SelectedPlaylist.Name;
-        IsRenamingPlaylist = false;
         SavePlaylists();
+        if (PlaylistError is not null) { SelectedPlaylist.Name = original; return; }
+        IsRenamingPlaylist = false;
     }
 
     [RelayCommand(CanExecute = nameof(HasPlaylist))]
@@ -198,11 +211,16 @@ public partial class MainViewModel
         PlaylistMessage = null;
         if (value is not null)
             value.Tracks.CollectionChanged += OnPlaylistTracksChanged;
+        RefreshPlaylistTrackRows();
         UpdatePlaylistCommands();
     }
 
     private void OnPlaylistTracksChanged(object? sender,
-        System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => UpdatePlaylistCommands();
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        RefreshPlaylistTrackRows();
+        UpdatePlaylistCommands();
+    }
 
     partial void OnSelectedTrackChanged(Track? value)
     {

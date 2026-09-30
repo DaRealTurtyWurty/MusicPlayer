@@ -143,23 +143,23 @@
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
-                        <Button Command="{Binding QueuePlaylistTrackCommand}" Style="{StaticResource IconButton}"
-                                ToolTip="Add track to queue" AutomationProperties.Name="Add playlist track to queue"
+                        <Button Click="QueueSelected_Click" Style="{StaticResource IconButton}"
+                                ToolTip="Queue selected tracks" AutomationProperties.Name="Add playlist track to queue"
                                 Margin="0,0,6,0">
                             <icons:LucideIcon Geometry="{StaticResource IconListPlus}" />
                         </Button>
-                        <Button Style="{StaticResource IconButton}" Command="{Binding MovePlaylistTrackUpCommand}"
-                                ToolTip="Move track up" AutomationProperties.Name="Move playlist track up"
+                        <Button Style="{StaticResource IconButton}" Click="MoveSelectedUp_Click"
+                                ToolTip="Move selected tracks up (Alt+Up)" AutomationProperties.Name="Move playlist track up"
                                 Margin="0,0,6,0">
                             <icons:LucideIcon Geometry="{StaticResource IconArrowUp}" />
                         </Button>
-                        <Button Style="{StaticResource IconButton}" Command="{Binding MovePlaylistTrackDownCommand}"
-                                ToolTip="Move track down" AutomationProperties.Name="Move playlist track down"
+                        <Button Style="{StaticResource IconButton}" Click="MoveSelectedDown_Click"
+                                ToolTip="Move selected tracks down (Alt+Down)" AutomationProperties.Name="Move playlist track down"
                                 Margin="0,0,6,0">
                             <icons:LucideIcon Geometry="{StaticResource IconArrowDown}" />
                         </Button>
-                        <Button Style="{StaticResource IconButton}" Command="{Binding RemovePlaylistTrackCommand}"
-                                ToolTip="Remove from playlist" AutomationProperties.Name="Remove playlist track">
+                        <Button Style="{StaticResource IconButton}" Click="RemoveSelected_Click"
+                                ToolTip="Remove selected tracks from playlist (Delete)" AutomationProperties.Name="Remove playlist track">
                             <icons:LucideIcon Geometry="{StaticResource IconTrash}" />
                         </Button>
                     </StackPanel>
@@ -233,7 +233,7 @@
                         </Grid>
                         <TextBlock Grid.Row="1" Text="{Binding SelectedPlaylist.DurationSummary}"
                                    Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" />
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,18,0,0">
+                        <WrapPanel Grid.Row="2" Margin="0,18,0,0">
                             <Button Command="{Binding PlayPlaylistCommand}" Style="{StaticResource PrimaryButton}"
                                     Margin="0,0,8,0">
                                 <StackPanel Orientation="Horizontal">
@@ -242,13 +242,15 @@
                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                 </StackPanel>
                             </Button>
+                            <Button Content="Add selected to playlist..." Click="AddSelectedToPlaylist_Click" Margin="0,0,8,0" />
+                            <Button Content="Export M3U8..." Click="ExportPlaylist_Click" Margin="0,0,8,0" />
                             <Button Command="{Binding QueuePlaylistCommand}">
                                 <StackPanel Orientation="Horizontal">
                                     <icons:LucideIcon Geometry="{StaticResource IconListPlus}" Margin="0,0,7,0" />
                                     <TextBlock Text="Add to queue" />
                                 </StackPanel>
                             </Button>
-                        </StackPanel>
+                        </WrapPanel>
                     </Grid>
                 </Grid>
                 <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1"
@@ -261,9 +263,9 @@
                     </Grid>
                 </Border>
                 <Grid Grid.Row="2" MinHeight="120">
-                    <ListBox x:Name="PlaylistTracks" ItemsSource="{Binding SelectedPlaylist.Tracks}"
+                    <ListBox SelectionMode="Extended" x:Name="PlaylistTracks" ItemsSource="{Binding PlaylistTrackRows}"
                              SelectedIndex="{Binding SelectedPlaylistTrackIndex, Mode=TwoWay}"
-                             MouseDoubleClick="PlaylistTracks_MouseDoubleClick"
+                             MouseDoubleClick="PlaylistTracks_MouseDoubleClick" PreviewKeyDown="PlaylistTracks_PreviewKeyDown"
                              AutomationProperties.Name="Playlist tracks" ScrollViewer.CanContentScroll="True"
                              VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                              VirtualizingPanel.ScrollUnit="Pixel">

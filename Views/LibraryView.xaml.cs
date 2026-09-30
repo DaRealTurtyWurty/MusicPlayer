@@ -42,7 +42,7 @@ public partial class LibraryView : UserControl
     {
         if (sender is not Button button ||
             ItemsControl.ContainerFromElement(TrackList, button) is not ListViewItem { ContextMenu: { } menu } row) return;
-        row.IsSelected = true;
+        if (!row.IsSelected) { TrackList.SelectedItems.Clear(); row.IsSelected = true; }
         row.Focus();
         menu.PlacementTarget = row;
         menu.Placement = PlacementMode.Bottom;
@@ -53,7 +53,7 @@ public partial class LibraryView : UserControl
     private void Track_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (sender is not ListViewItem row) return;
-        row.IsSelected = true;
+        if (!row.IsSelected) { TrackList.SelectedItems.Clear(); row.IsSelected = true; }
         row.Focus();
         if (row.ContextMenu is { } menu)
         {
@@ -66,8 +66,7 @@ public partial class LibraryView : UserControl
     {
         if (sender is MenuItem { DataContext: Track track } && DataContext is MainViewModel vm)
         {
-            vm.SelectedTrack = track;
-            vm.AddToQueueCommand.Execute(null);
+            vm.QueueTracks(SelectedTracks(track));
         }
         e.Handled = true;
     }
@@ -76,8 +75,7 @@ public partial class LibraryView : UserControl
     {
         if (sender is MenuItem { DataContext: Track track } && DataContext is MainViewModel vm)
         {
-            vm.SelectedTrack = track;
-            vm.PlayNextCommand.Execute(null);
+            vm.QueueTracks(SelectedTracks(track), playNext: true);
         }
         e.Handled = true;
     }
@@ -88,7 +86,7 @@ public partial class LibraryView : UserControl
     {
         if (sender is MenuItem { DataContext: Track track } && DataContext is MainViewModel vm)
         {
-            var picker = new PlaylistPickerWindow(vm, track) { Owner = Window.GetWindow(this) };
+            var picker = new PlaylistPickerWindow(vm, SelectedTracks(track)) { Owner = Window.GetWindow(this) };
             picker.ShowDialog();
         }
         e.Handled = true;
@@ -101,4 +99,23 @@ public partial class LibraryView : UserControl
             DataContext is MainViewModel vm && vm.PlaySelectedTrackCommand.CanExecute(null))
             vm.PlaySelectedTrackCommand.Execute(null);
     }
+    private Track[] SelectedTracks(Track? fallback = null)
+    {
+        if (fallback is not null && !TrackList.SelectedItems.Contains(fallback)) return [fallback];
+        return TrackList.Items.Cast<Track>().Where(t => TrackList.SelectedItems.Contains(t)).ToArray();
+    }
+    private void QueueSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm) vm.QueueTracks(SelectedTracks());
+    }
+    private void PlaySelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm) vm.PlayTracks(SelectedTracks());
+    }
+    private void AddSelectedToPlaylist_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && SelectedTracks() is { Length: > 0 } tracks)
+            new PlaylistPickerWindow(vm, tracks) { Owner = Window.GetWindow(this) }.ShowDialog();
+    }
+
 }

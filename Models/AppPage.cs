@@ -6,5 +6,6 @@ public enum AppPage
     Playlists,
     NowPlaying,
     Albums,
-    Artists
+    Artists,
+    Settings
 }

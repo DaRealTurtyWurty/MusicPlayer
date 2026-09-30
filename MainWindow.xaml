@@ -23,6 +23,7 @@
                       xmlns:views="clr-namespace:MusicPlayer.Views" x:Key="NowPlayingPageTemplate">
             <views:NowPlayingView />
         </DataTemplate>
+        <DataTemplate x:Key="SettingsPageTemplate"><views:SettingsView /></DataTemplate>
     </Window.Resources>
     <Grid x:Name="RootLayout">
         <Border x:Name="NotificationToast" Panel.ZIndex="5" HorizontalAlignment="Right" VerticalAlignment="Bottom"
@@ -63,9 +64,6 @@
             <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}"
                     BorderThickness="0,0,0,1" Padding="20,0">
                 <Grid>
-                    <Button Content="Discord" Click="DiscordSettings_Click" HorizontalAlignment="Right"
-                            VerticalAlignment="Center" Style="{StaticResource QuietButton}"
-                            ToolTip="Configure Discord presence" AutomationProperties.Name="Discord presence settings" />
                     <Border Background="{StaticResource CanvasBrush}" BorderBrush="{StaticResource LineBrush}"
                             BorderThickness="1" CornerRadius="12" Padding="4" HorizontalAlignment="Center"
                             VerticalAlignment="Center" AutomationProperties.Name="Views">
@@ -107,6 +105,14 @@
                                     <TextBlock Text="Now Playing" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                 </StackPanel>
                             </Button>
+                            <Button Command="{Binding NavigateCommand}" CommandParameter="{x:Static models:AppPage.Settings}"
+                                    Style="{StaticResource SettingsNavigationButton}" AutomationProperties.Name="Settings" Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <icons:LucideIcon Geometry="M 9,2 L 15,2 L 16,5 L 19,5 L 22,10 L 20,12 L 22,14 L 19,19 L 16,19 L 15,22 L 9,22 L 8,19 L 5,19 L 2,14 L 4,12 L 2,10 L 5,5 L 8,5 Z M 16,12 A 4,4 0 1 1 8,12 A 4,4 0 1 1 16,12"
+                                                      Width="16" Height="16" Margin="0,0,8,0" />
+                                    <TextBlock Text="Settings" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -123,6 +129,7 @@
                         <Style TargetType="ContentControl">
                             <Setter Property="ContentTemplate" Value="{StaticResource LibraryPageTemplate}" />
                             <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedPage}" Value="Settings"><Setter Property="ContentTemplate" Value="{StaticResource SettingsPageTemplate}" /></DataTrigger>
                                 <DataTrigger Binding="{Binding SelectedPage}" Value="Albums">
                                     <Setter Property="ContentTemplate" Value="{StaticResource MusicBrowserPageTemplate}" />
                                 </DataTrigger>
@@ -304,7 +311,7 @@
                                 GotKeyboardFocus="VolumeControl_GotKeyboardFocus"
                                 LostKeyboardFocus="VolumeControl_LostKeyboardFocus"
                                 PreviewKeyDown="VolumeControl_PreviewKeyDown"
-                                ToolTip="Volume and audio output; click to mute or unmute"
+                                ToolTip="Volume; click to mute or unmute"
                                 AutomationProperties.Name="{Binding MuteLabel}">
                             <icons:LucideIcon>
                                 <icons:LucideIcon.Style>
@@ -323,7 +330,7 @@
                                Placement="Top" HorizontalOffset="-15" VerticalOffset="-6"
                                AllowsTransparency="True" PopupAnimation="Fade" StaysOpen="True"
                                DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                            <Border x:Name="VolumePopupContent" Width="240" Padding="12,14" CornerRadius="8"
+                            <Border x:Name="VolumePopupContent" Width="64" Padding="12,14" CornerRadius="8"
                                     Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}"
                                     BorderThickness="1" MouseEnter="VolumeControl_MouseEnter"
                                     MouseLeave="VolumeControl_MouseLeave"
@@ -331,12 +338,6 @@
                                     LostKeyboardFocus="VolumeControl_LostKeyboardFocus"
                                     PreviewKeyDown="VolumeControl_PreviewKeyDown">
                                 <StackPanel>
-                                    <TextBlock Text="Audio output" Margin="0,0,0,6" />
-                                    <ComboBox x:Name="AudioOutputSelector" Margin="0,0,0,12"
-                                              ItemsSource="{Binding AudioOutputDevices}" DisplayMemberPath="Name"
-                                              SelectedItem="{Binding SelectedAudioOutputDevice, Mode=TwoWay}"
-                                              IsEnabled="{Binding CanSelectAudioOutput}"
-                                              ToolTip="Audio output device" AutomationProperties.Name="Audio output device" />
                                     <TextBlock Text="{Binding Volume, StringFormat='{}{0:0}%'}" FontSize="11"
                                                Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"
                                                Margin="0,0,0,10" />

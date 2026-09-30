@@ -8,6 +8,32 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--settings-smoke"])
+        {
+            var settingsApp = new App();
+            settingsApp.InitializeComponent();
+            settingsApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckDiscordSettingsLayout();
+            CheckAudioDeviceLayout();
+            CheckVolume(null);
+            CheckSettingsNavigation();
+            return;
+        }
+        if (args is ["--library-workflows-smoke"])
+        {
+            var workflowApp = new App();
+            workflowApp.InitializeComponent();
+            workflowApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckLibraryWorkflows();
+            CheckLibraryWorkflowLayout();
+            CheckLargePlaylistLayout();
+            CheckTrackMenus();
+            CheckTrackActions();
+            DispatcherTest.Run(CheckLibraryMaintenanceAsync);
+            DispatcherTest.Run(CheckLibraryMembershipAsync);
+            DispatcherTest.Run(LibraryTests.RunAsync);
+            return;
+        }
         if (args is ["--audio-smoke"] or ["--audio-device-live"])
         {
             var audioApp = new App();
@@ -288,6 +314,7 @@ internal static partial class Program
         SqlitePersistenceTests.Run();
         DispatcherTest.Run(CheckTrackMetadataAsync);
         CheckPlaylistsAndNavigation();
+        CheckLibraryWorkflows();
         DispatcherTest.Run(PlaylistImportTests.RunAsync);
         DispatcherTest.Run(LibraryTests.RunAsync);
         DispatcherTest.Run(LibraryRefreshTests.RunAsync);
@@ -298,6 +325,7 @@ internal static partial class Program
         app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
         DispatcherTest.Run(CheckAudioAsync);
         CheckDiscordSettingsLayout();
+        CheckLibraryWorkflowLayout();
         DispatcherTest.Run(CheckArtistPhotosAsync);
         DispatcherTest.Run(CheckReleaseTypesAsync);
         DispatcherTest.Run(CheckMusicBrowserAsync);

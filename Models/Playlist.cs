@@ -59,7 +59,11 @@ public partial class Playlist : ObservableObject
             var replacement = tracks.ToArray();
             CheckReentrancy();
             Items.Clear();
-            AddRange(replacement);
+            foreach (var track in replacement) Items.Add(track);
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(Count)));
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs("Item[]"));
+            OnCollectionChanged(new System.Collections.Specialized.NotifyCollectionChangedEventArgs(
+                System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
         }
         public void AddRange(IEnumerable<Track> tracks)
         {

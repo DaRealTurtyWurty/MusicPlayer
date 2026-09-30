@@ -234,15 +234,15 @@ internal static partial class Program
     private static void CheckDiscordSettingsLayout()
     {
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), new FakePlayer());
-        var settings = new MusicPlayer.Views.DiscordSettingsWindow(vm);
+        var settings = new MusicPlayer.Views.SettingsView { DataContext = vm };
         var content = (FrameworkElement)settings.Content;
-        content.Measure(new Size(460, double.PositiveInfinity));
-        content.Arrange(new Rect(new Point(), content.DesiredSize));
+        content.Measure(new Size(760, 500));
+        content.Arrange(new Rect(0, 0, 760, 500));
         content.UpdateLayout();
-        Check(content.ActualHeight < 600 && ((TextBox)settings.FindName("ApplicationIdBox")).ActualWidth > 300,
-            "Discord settings compile and fit their dialog");
+        Check(content.ActualHeight == 500 && ((TextBox)settings.FindName("ApplicationIdBox")).ActualWidth > 300,
+            "Discord settings are embedded in the scrollable Settings page");
         Check(!vm.DiscordPresenceOptions.Enabled, "Opening settings never enables sharing");
-        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(460, (int)Math.Ceiling(content.DesiredSize.Height),
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(760, 500,
             96, 96, System.Windows.Media.PixelFormats.Pbgra32);
         var background = new System.Windows.Media.DrawingVisual();
         using (var drawing = background.RenderOpen())
@@ -253,6 +253,17 @@ internal static partial class Program
         encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
         System.IO.Directory.CreateDirectory("artifacts");
         using (var stream = System.IO.File.Create("artifacts/discord-settings.png")) encoder.Save(stream);
-        settings.Close();
+        var enabled = (CheckBox)settings.FindName("EnabledCheckBox");
+        var applicationId = (TextBox)settings.FindName("ApplicationIdBox");
+        var save = (Button)settings.FindName("SaveDiscordButton");
+        enabled.IsChecked = true;
+        applicationId.Text = "invalid";
+        save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(!vm.DiscordPresenceOptions.Enabled && ((TextBlock)settings.FindName("ValidationText")).Visibility == Visibility.Visible,
+            "Inline Discord settings validate the application ID before enabling presence");
+        applicationId.Text = MusicPlayer.Models.DiscordPresenceOptions.DefaultApplicationId;
+        save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(vm.DiscordPresenceOptions.Enabled, "Saving Discord settings applies the configuration within the page");
+        settings.DataContext = null;
     }
 }

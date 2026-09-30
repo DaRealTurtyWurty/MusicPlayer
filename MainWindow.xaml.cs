@@ -18,12 +18,6 @@ public partial class MainWindow : Window
     private IInputElement? _focusBeforeDeletePlaylist;
     private readonly DispatcherTimer _volumeCloseTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
 
-    private void DiscordSettings_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
-            new Views.DiscordSettingsWindow(viewModel) { Owner = this }.ShowDialog();
-    }
-
     private void VolumeControl_MouseEnter(object sender, MouseEventArgs e) => OpenVolumePopup();
 
     private void VolumeControl_MouseLeave(object sender, MouseEventArgs e) => _volumeCloseTimer.Start();
@@ -47,8 +41,7 @@ public partial class MainWindow : Window
     private void VolumeCloseTimer_Tick(object? sender, EventArgs e)
     {
         // Keep the popup alive while crossing the gap or dragging beyond its bounds.
-        if (VolumePopupContent.IsMouseCaptureWithin || AudioOutputSelector.IsDropDownOpen ||
-            AudioOutputSelector.IsKeyboardFocusWithin) return;
+        if (VolumePopupContent.IsMouseCaptureWithin) return;
         _volumeCloseTimer.Stop();
         if (!MuteButton.IsMouseOver && !VolumePopupContent.IsMouseOver)
             VolumePopup.IsOpen = false;

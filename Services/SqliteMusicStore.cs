@@ -269,6 +269,17 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
         }
     }
 
+    public void RemoveMusicFolder(string path)
+    {
+        lock (_gate)
+        {
+            using var db = Open();
+            var folder = db.MusicFolders.Find(Path.GetFullPath(path).ToUpperInvariant());
+            if (folder is not null) db.MusicFolders.Remove(folder);
+            db.SaveChanges();
+        }
+    }
+
     public void RelocateTrack(string originalPath, Track replacement)
     {
         var oldKey = Path.GetFullPath(originalPath).ToUpperInvariant();

@@ -40,6 +40,7 @@ public partial class MainViewModel
         if (service is null || !_canSaveLibrary) return;
         try { _musicFolders.AddRange(_maintenanceStore?.LoadMusicFolders() ?? []); }
         catch (Exception ex) { LibraryError = $"Could not load watched folders: {ex.Message}"; }
+        RefreshWatchedFolders();
         if (!monitor) return;
         var dispatcher = Dispatcher.CurrentDispatcher;
         _refreshDebounce = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
@@ -47,7 +48,7 @@ public partial class MainViewModel
         // Incremental reconciliation also covers watcher overflows and disconnected drives returning.
         _refreshFallback = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
         _refreshFallback.Tick += OnRefreshRequested;
-        _refreshFallback.Start();
+        if (AutomaticScanning) _refreshFallback.Start();
         _fileMonitor = new LibraryFileMonitor(() =>
         {
             if (!_maintenanceCancellation.IsCancellationRequested && !dispatcher.HasShutdownStarted)
@@ -58,7 +59,7 @@ public partial class MainViewModel
 
     private void ScheduleLibraryRefresh()
     {
-        if (_maintenanceCancellation.IsCancellationRequested || _refreshDebounce is null) return;
+        if (!AutomaticScanning || _maintenanceCancellation.IsCancellationRequested || _refreshDebounce is null) return;
         _refreshDebounce.Stop();
         _refreshDebounce.Start();
     }
@@ -66,7 +67,7 @@ public partial class MainViewModel
     private async void OnRefreshRequested(object? sender, EventArgs e)
     {
         _refreshDebounce?.Stop();
-        await RefreshLibraryAsync();
+        if (AutomaticScanning) await RefreshLibraryAsync();
     }
 
     private bool CanRefreshLibrary() => _libraryRefreshService is not null && _canSaveLibrary &&
@@ -85,7 +86,7 @@ public partial class MainViewModel
         {
             var tracks = KnownPlaybackTracks().DistinctBy(t => LibraryTrackKey(t.FilePath), StringComparer.OrdinalIgnoreCase).ToArray();
             var folders = GetMusicFolders(tracks);
-            if (_fileMonitor is { } monitor) await Task.Run(() => monitor.Configure(folders));
+            if (_fileMonitor is { } monitor) await Task.Run(() => monitor.Configure(AutomaticScanning ? folders : []));
             var result = await _libraryRefreshService.RefreshAsync(tracks, folders, force, _maintenanceCancellation.Token);
             _maintenanceCancellation.Token.ThrowIfCancellationRequested();
             ApplyTrackUpdates(result.Updates.ToDictionary(t => LibraryTrackKey(t.FilePath), StringComparer.OrdinalIgnoreCase));
@@ -102,7 +103,7 @@ public partial class MainViewModel
             if (_fileMonitor is { } updatedMonitor)
             {
                 var updatedFolders = GetMusicFolders(Tracks);
-                await Task.Run(() => updatedMonitor.Configure(updatedFolders));
+                await Task.Run(() => updatedMonitor.Configure(AutomaticScanning ? updatedFolders : []));
             }
         }
         catch (OperationCanceledException) { }
@@ -117,7 +118,7 @@ public partial class MainViewModel
     private IReadOnlyList<WatchedMusicFolder> GetMusicFolders(IEnumerable<Track> tracks)
     {
         var trackFolders = tracks.GroupBy(t => Path.GetDirectoryName(Path.GetFullPath(t.FilePath)), StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Key is not null).Select(g => new WatchedMusicFolder(g.Key!, false, g.Any(t => t.ExplicitlyAddedToLibrary)));
+            .Where(g => g.Key is not null).Select(g => new WatchedMusicFolder(g.Key!, false, false));
         var folders = _musicFolders.Concat(trackFolders)
             .GroupBy(f => Path.TrimEndingDirectorySeparator(Path.GetFullPath(f.Path)), StringComparer.OrdinalIgnoreCase)
             .Select(g => new WatchedMusicFolder(g.Key, g.Any(f => f.IncludeSubdirectories), g.Any(f => f.DiscoverNewTracks))).ToArray();
@@ -131,8 +132,18 @@ public partial class MainViewModel
     {
         if (_libraryRefreshService is null) return;
         var folder = new WatchedMusicFolder(Path.GetFullPath(path), true, discoverNewTracks);
-        if (!_musicFolders.Contains(folder)) _musicFolders.Add(folder);
-        try { await Task.Run(() => _maintenanceStore?.SaveMusicFolder(folder)); }
+        try
+        {
+            await Task.Run(() => _maintenanceStore?.SaveMusicFolder(folder));
+            var existing = _musicFolders.FindIndex(f => string.Equals(f.Path, folder.Path, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0)
+            {
+                var previous = _musicFolders[existing];
+                _musicFolders[existing] = folder with { DiscoverNewTracks = previous.DiscoverNewTracks || folder.DiscoverNewTracks };
+            }
+            else _musicFolders.Add(folder);
+            RefreshWatchedFolders();
+        }
         catch (Exception ex) { LibraryError = $"Could not save watched folder: {ex.Message}"; }
         ScheduleLibraryRefresh();
     }
@@ -295,6 +306,7 @@ public partial class MainViewModel
     {
         ConfirmDeletePlaylistCommand.NotifyCanExecuteChanged();
         RescanLibraryCommand.NotifyCanExecuteChanged();
+        AddWatchedFolderCommand.NotifyCanExecuteChanged();
         LocateFileCommand.NotifyCanExecuteChanged();
         LocateFolderCommand.NotifyCanExecuteChanged();
         AddMusicFilesCommand.NotifyCanExecuteChanged();

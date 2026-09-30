@@ -33,9 +33,13 @@ public partial class MainViewModel
         _libraryStore = store;
         // A dedicated view keeps browsing filters separate from the source library and queue.
         LibraryTracks = new ListCollectionView(Tracks) { Filter = MatchesLibrarySearch };
-        LibraryTracks.SortDescriptions.Add(new(nameof(Track.Artist), ListSortDirection.Ascending));
-        LibraryTracks.SortDescriptions.Add(new(nameof(Track.Album), ListSortDirection.Ascending));
-        LibraryTracks.SortDescriptions.Add(new(nameof(Track.Title), ListSortDirection.Ascending));
+        var preferences = _uiPreferencesStore?.LoadLibraryWorkflow() ?? new();
+        _restoringLibraryPreferences = true;
+        LibrarySort = Enum.IsDefined(preferences.Sort) ? preferences.Sort : LibrarySort.Artist;
+        LibrarySortDescending = preferences.Descending;
+        AutomaticScanning = preferences.AutomaticScanning;
+        _restoringLibraryPreferences = false;
+        ApplyLibrarySort();
         ((INotifyCollectionChanged)LibraryTracks).CollectionChanged += (_, _) => PlayAllCommand.NotifyCanExecuteChanged();
         Tracks.CollectionChanged += OnLibraryCollectionChanged;
         try
@@ -264,11 +268,7 @@ public partial class MainViewModel
     {
         if (item is not Track track) return false;
         if (ShowUncategorizedTracks && _playlistTrackPaths.Contains(LibraryTrackKey(track.FilePath))) return false;
-        var query = LibrarySearchText.Trim();
-        return query.Length == 0 ||
-               track.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-               (track.Artist?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false) ||
-               (track.Album?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false);
+        return TrackSearch.Matches(track, LibrarySearchText);
     }
 
     partial void OnLibrarySearchTextChanged(string value) => LibraryTracks.Refresh();

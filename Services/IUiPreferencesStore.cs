@@ -4,6 +4,8 @@ namespace MusicPlayer.Services;
 
 public interface IUiPreferencesStore
 {
+    LibraryWorkflowPreferences LoadLibraryWorkflow() => new();
+    void SaveLibraryWorkflow(LibraryWorkflowPreferences preferences) { }
     string? LoadOutputDeviceId() => null;
     void SaveOutputDeviceId(string? deviceId) { }
     bool LoadQueueOpen();
