@@ -160,6 +160,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _fileLocationService = fileLocationService ?? new FileLocationService();
         _random = random ?? Random.Shared;
         _uiPreferencesStore = uiPreferencesStore;
+        InitializeAudioDevices();
         _discordPresenceOptions = _uiPreferencesStore?.LoadDiscordPresence() ?? new();
         Lyrics = new LyricsViewModel(lyricsSource ?? new LocalLyricsSource(), uiPreferencesStore);
         Lyrics.SeekRequested += SeekToLyrics;
@@ -198,9 +199,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (filePath is null)
             return;
 
-        var track = _metadataService.ReadTrack(filePath);
-        AddLibraryTracks([track], explicitlyAdded: true);
-        LoadTrack(track, playImmediately: false);
+        try
+        {
+            var track = _metadataService.ReadTrack(filePath);
+            AddLibraryTracks([track], explicitlyAdded: true);
+            LoadTrack(track, playImmediately: false);
+        }
+        catch (Exception ex) { PlaybackError = $"Could not open audio file: {ex.Message}"; }
     }
 
     [RelayCommand]
@@ -219,11 +224,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_audioPlayer.Position >= _audioPlayer.Duration)
-            _audioPlayer.Seek(TimeSpan.Zero);
-        _audioPlayer.Play();
+        if (!TryPlaybackAction(() =>
+            {
+                if (_audioPlayer.Position >= _audioPlayer.Duration) _audioPlayer.Seek(TimeSpan.Zero);
+                _audioPlayer.Play();
+            })) return;
         IsPlaybackStopped = false;
-        IsPlaying = true;
+        IsPlaying = OutputIsPlaying;
     }
 
     private bool CanTogglePlayback() => CurrentTrack is not null || Queue.Count > 0;
@@ -326,7 +333,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     {
         if (CurrentTrack is not null && (_audioPlayer.Position.TotalSeconds > 3 || _playbackHistory.Count == 0))
         {
-            _audioPlayer.Seek(TimeSpan.Zero);
+            if (!TryPlaybackAction(() => _audioPlayer.Seek(TimeSpan.Zero))) return;
             PositionSeconds = 0;
             Play();
             return;
@@ -378,6 +385,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         // Unreadable tracks should not prevent the rest of the queue from playing.
         // Recycle only once per advance so a queue of failed files cannot loop forever.
+        var skipped = new List<string>();
         while (Queue.Count > 0)
         {
             var track = Queue[0];
@@ -386,9 +394,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
             {
                 if (recycleCurrent)
                     RememberTrack(previous, recycled);
+                if (skipped.Count > 0) PlaybackError = string.Join(Environment.NewLine, skipped);
                 return;
             }
+            if (PlaybackError is { } error) skipped.Add(error);
         }
+        if (skipped.Count > 0) PlaybackError = string.Join(Environment.NewLine, skipped);
         if (recycleCurrent && CurrentTrack is null)
             RememberTrack(previous, recycled);
     }
@@ -507,7 +518,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             if (playImmediately)
                 _audioPlayer.Play();
             IsPlaybackStopped = false;
-            IsPlaying = playImmediately;
+            IsPlaying = playImmediately && OutputIsPlaying;
             if (rememberCurrent)
                 RememberTrack(previous);
             return true;
@@ -527,7 +538,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Pause()
     {
-        _audioPlayer.Pause();
+        if (!TryPlaybackAction(_audioPlayer.Pause)) return;
         IsPlaybackStopped = false;
         IsPlaying = false;
     }
@@ -535,7 +546,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Stop()
     {
-        _audioPlayer.Stop();
+        if (!TryPlaybackAction(_audioPlayer.Stop)) return;
         IsPlaybackStopped = true;
         IsPlaying = false;
         PositionSeconds = 0;
@@ -563,7 +574,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         if (_updatingPosition)
             return;
 
-        _audioPlayer.Seek(TimeSpan.FromSeconds(value));
+        if (!double.IsFinite(value) || !TryPlaybackAction(() => _audioPlayer.Seek(TimeSpan.FromSeconds(value)))) return;
         RefreshLyricsPosition();
         PlaybackSeeked?.Invoke(this, EventArgs.Empty);
     }
@@ -583,6 +594,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         DisposePlaybackSession();
         _positionTimer.Stop();
         _audioPlayer.PlaybackEnded -= OnPlaybackEnded;
+        DisposeAudioDevices();
         DisposeLibrary();
         if (SelectedPlaylist is not null)
             SelectedPlaylist.Tracks.CollectionChanged -= OnPlaylistTracksChanged;

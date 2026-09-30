@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="..\MusicPlayer.csproj" />
     <None Update="Fixtures\EmbeddedLyrics\silence.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\Playback\silence.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

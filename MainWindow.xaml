@@ -151,6 +151,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding PlaybackError}" Value="{x:Null}" />
+                                    <Condition Binding="{Binding AudioOutputMessage}" Value="{x:Null}" />
                                     <Condition Binding="{Binding PlaylistError}" Value="{x:Null}" />
                                     <Condition Binding="{Binding LocateStatus}" Value="{x:Null}" />
                                 </MultiDataTrigger.Conditions>
@@ -161,6 +162,7 @@
                 </Border.Style>
                 <StackPanel>
                     <TextBlock Text="{Binding PlaybackError}" Foreground="#F0B6A3" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding AudioOutputMessage}" Foreground="#F0B6A3" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding PlaylistError}" Foreground="#F0B6A3" TextWrapping="Wrap" />
                     <DockPanel>
                         <DockPanel.Style>
@@ -302,6 +304,7 @@
                                 GotKeyboardFocus="VolumeControl_GotKeyboardFocus"
                                 LostKeyboardFocus="VolumeControl_LostKeyboardFocus"
                                 PreviewKeyDown="VolumeControl_PreviewKeyDown"
+                                ToolTip="Volume and audio output; click to mute or unmute"
                                 AutomationProperties.Name="{Binding MuteLabel}">
                             <icons:LucideIcon>
                                 <icons:LucideIcon.Style>
@@ -320,7 +323,7 @@
                                Placement="Top" HorizontalOffset="-15" VerticalOffset="-6"
                                AllowsTransparency="True" PopupAnimation="Fade" StaysOpen="True"
                                DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                            <Border x:Name="VolumePopupContent" Width="64" Padding="12,14" CornerRadius="8"
+                            <Border x:Name="VolumePopupContent" Width="240" Padding="12,14" CornerRadius="8"
                                     Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}"
                                     BorderThickness="1" MouseEnter="VolumeControl_MouseEnter"
                                     MouseLeave="VolumeControl_MouseLeave"
@@ -328,6 +331,12 @@
                                     LostKeyboardFocus="VolumeControl_LostKeyboardFocus"
                                     PreviewKeyDown="VolumeControl_PreviewKeyDown">
                                 <StackPanel>
+                                    <TextBlock Text="Audio output" Margin="0,0,0,6" />
+                                    <ComboBox x:Name="AudioOutputSelector" Margin="0,0,0,12"
+                                              ItemsSource="{Binding AudioOutputDevices}" DisplayMemberPath="Name"
+                                              SelectedItem="{Binding SelectedAudioOutputDevice, Mode=TwoWay}"
+                                              IsEnabled="{Binding CanSelectAudioOutput}"
+                                              ToolTip="Audio output device" AutomationProperties.Name="Audio output device" />
                                     <TextBlock Text="{Binding Volume, StringFormat='{}{0:0}%'}" FontSize="11"
                                                Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center"
                                                Margin="0,0,0,10" />

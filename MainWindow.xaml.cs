@@ -47,7 +47,8 @@ public partial class MainWindow : Window
     private void VolumeCloseTimer_Tick(object? sender, EventArgs e)
     {
         // Keep the popup alive while crossing the gap or dragging beyond its bounds.
-        if (VolumePopupContent.IsMouseCaptureWithin) return;
+        if (VolumePopupContent.IsMouseCaptureWithin || AudioOutputSelector.IsDropDownOpen ||
+            AudioOutputSelector.IsKeyboardFocusWithin) return;
         _volumeCloseTimer.Stop();
         if (!MuteButton.IsMouseOver && !VolumePopupContent.IsMouseOver)
             VolumePopup.IsOpen = false;

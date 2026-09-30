@@ -4,6 +4,8 @@ namespace MusicPlayer.Services;
 
 public interface IUiPreferencesStore
 {
+    string? LoadOutputDeviceId() => null;
+    void SaveOutputDeviceId(string? deviceId) { }
     bool LoadQueueOpen();
     void SaveQueueOpen(bool isOpen);
     AppPage LoadSelectedPage();

@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--audio-smoke"] or ["--audio-device-live"])
+        {
+            var audioApp = new App();
+            audioApp.InitializeComponent();
+            audioApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(args[0] == "--audio-smoke" ? CheckAudioAsync : CheckAudioDeviceLiveAsync);
+            return;
+        }
         if (args is ["--track-metadata-smoke"])
         {
             DispatcherTest.Run(CheckTrackMetadataAsync);
@@ -288,6 +296,7 @@ internal static partial class Program
         var app = new App();
         app.InitializeComponent();
         app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+        DispatcherTest.Run(CheckAudioAsync);
         CheckDiscordSettingsLayout();
         DispatcherTest.Run(CheckArtistPhotosAsync);
         DispatcherTest.Run(CheckReleaseTypesAsync);
