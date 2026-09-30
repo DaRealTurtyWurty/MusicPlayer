@@ -8,6 +8,11 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--track-metadata-smoke"])
+        {
+            DispatcherTest.Run(CheckTrackMetadataAsync);
+            return;
+        }
         if (args is ["--queue-smoke"])
         {
             var queueApp = new App();
@@ -273,6 +278,7 @@ internal static partial class Program
         CheckNativeSystemMediaControls();
         DispatcherTest.Run(CheckPlaybackSessionPersistenceAsync);
         SqlitePersistenceTests.Run();
+        DispatcherTest.Run(CheckTrackMetadataAsync);
         CheckPlaylistsAndNavigation();
         DispatcherTest.Run(PlaylistImportTests.RunAsync);
         DispatcherTest.Run(LibraryTests.RunAsync);

@@ -30,6 +30,10 @@ public sealed class TagLibMetadataService : IMetadataService
             MusicBrainzReleaseId = MusicBrainzId.Normalize(tagFile.Tag.MusicBrainzReleaseId),
             MusicBrainzReleaseGroupId = MusicBrainzId.Normalize(tagFile.Tag.MusicBrainzReleaseGroupId),
             ReleaseTypeTag = ReadReleaseType(tagFile),
+            DiscNumber = tagFile.Tag.Disc,
+            TrackNumber = tagFile.Tag.Track,
+            Year = tagFile.Tag.Year,
+            Genre = tagFile.Tag.JoinedGenres,
 
             Duration = tagFile.Properties.Duration,
 

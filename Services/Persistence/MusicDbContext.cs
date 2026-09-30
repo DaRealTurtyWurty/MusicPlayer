@@ -89,6 +89,10 @@ public sealed class StoredTrack
     public string? MusicBrainzReleaseId { get; set; }
     public string? MusicBrainzReleaseGroupId { get; set; }
     public string? ReleaseTypeTag { get; set; }
+    public uint DiscNumber { get; set; }
+    public uint TrackNumber { get; set; }
+    public uint Year { get; set; }
+    public string? Genre { get; set; }
     public long DurationTicks { get; set; }
     public long? FileSize { get; set; }
     public long? LastWriteTimeUtcTicks { get; set; }

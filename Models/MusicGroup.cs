@@ -15,7 +15,8 @@ public sealed record MusicGroup(
     public string ReleaseTypeHint { get; init; } = "No release-type tag found.";
     public bool IsRelease => Kind == MusicGroupKind.Album;
     public string ReleaseTypeLabel => ReleaseType == ReleaseType.Unknown ? "Unknown type" : ReleaseType.ToString();
-    public string Key => Kind == MusicGroupKind.Artist ? Normalize(Name) : $"{Normalize(Artist)}\0{Normalize(Name)}";
+    public string Key => Kind == MusicGroupKind.Artist ? Normalize(Name)
+        : Tracks.Count > 0 ? AlbumKey(Tracks[0]) : $"{Normalize(Artist)}\0{Normalize(Name)}";
     public string Subtitle => Kind == MusicGroupKind.Album ? Artist : $"{Albums.Count} {(Albums.Count == 1 ? "release" : "releases")}";
     public string Summary => $"{Tracks.Count} {(Tracks.Count == 1 ? "track" : "tracks")}";
     public string DurationSummary
@@ -30,6 +31,26 @@ public sealed record MusicGroup(
     }
 
     public static string ArtistName(Track track) => string.IsNullOrWhiteSpace(track.Artist) ? "Unknown artist" : track.Artist.Trim();
+    public static string AlbumArtistName(Track track) => string.IsNullOrWhiteSpace(track.AlbumArtist)
+        ? ArtistName(track) : track.AlbumArtist.Trim();
     public static string AlbumName(Track track) => string.IsNullOrWhiteSpace(track.Album) ? "Unknown album" : track.Album.Trim();
+    public static string LegacyAlbumKey(Track track) => $"{Normalize(ArtistName(track))}\0{Normalize(AlbumName(track))}";
+    public static string AlbumKey(Track track)
+    {
+        var artist = Normalize(AlbumArtistName(track));
+        if (MusicBrainzId.Normalize(track.MusicBrainzReleaseId) is { } release)
+            return $"release\0{artist}\0{release}";
+        if (MusicBrainzId.Normalize(track.MusicBrainzReleaseGroupId) is { } group)
+            return $"release-group\0{artist}\0{group}";
+        return $"album\0{artist}\0{Normalize(AlbumName(track))}\0{track.Year}";
+    }
+
+    public static IReadOnlyList<Track> OrderAlbumTracks(IEnumerable<Track> tracks) => tracks
+        // Untagged discs are conventionally disc one; unnumbered tracks follow numbered tracks.
+        .OrderBy(t => t.DiscNumber == 0 ? 1u : t.DiscNumber)
+        .ThenBy(t => t.TrackNumber == 0 ? ulong.MaxValue : t.TrackNumber)
+        .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+        .ThenBy(t => t.FilePath, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(t => t.FilePath, StringComparer.Ordinal).ToArray();
     public static string Normalize(string value) => value.Trim().ToUpperInvariant();
 }

@@ -24,7 +24,9 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
                 Artist = t.Artist, Album = t.Album, Duration = TimeSpan.FromTicks(t.DurationTicks),
                 MusicBrainzArtistId = t.MusicBrainzArtistId, MetadataVersion = t.MetadataVersion,
                 AlbumArtist = t.AlbumArtist, MusicBrainzReleaseId = t.MusicBrainzReleaseId,
-                MusicBrainzReleaseGroupId = t.MusicBrainzReleaseGroupId
+                MusicBrainzReleaseGroupId = t.MusicBrainzReleaseGroupId,
+                    DiscNumber = t.DiscNumber, TrackNumber = t.TrackNumber, Year = t.Year, Genre = t.Genre,
+                    ReleaseTypeTag = t.ReleaseTypeTag
             };
         }).ToArray();
     }
@@ -32,7 +34,8 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
     public void Save(IEnumerable<Track> tracks)
     {
         var saved = tracks.Select(t => new SavedTrack(t.FilePath, t.Title, t.Artist, t.Album, t.Duration.Ticks,
-            t.MusicBrainzArtistId, t.MetadataVersion, t.AlbumArtist, t.MusicBrainzReleaseId, t.MusicBrainzReleaseGroupId));
+            t.MusicBrainzArtistId, t.MetadataVersion, t.AlbumArtist, t.MusicBrainzReleaseId, t.MusicBrainzReleaseGroupId,
+                t.DiscNumber, t.TrackNumber, t.Year, t.Genre, t.ReleaseTypeTag));
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_path))!);
         var temporaryPath = _path + ".tmp";
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(saved));
@@ -41,5 +44,6 @@ public sealed class JsonLibraryStore(string? path = null) : ILibraryStore
 
     private sealed record SavedTrack(string FilePath, string? Title, string? Artist, string? Album, long DurationTicks,
         string? MusicBrainzArtistId = null, int MetadataVersion = 0, string? AlbumArtist = null,
-        string? MusicBrainzReleaseId = null, string? MusicBrainzReleaseGroupId = null);
+        string? MusicBrainzReleaseId = null, string? MusicBrainzReleaseGroupId = null,
+        uint DiscNumber = 0, uint TrackNumber = 0, uint Year = 0, string? Genre = null, string? ReleaseTypeTag = null);
 }

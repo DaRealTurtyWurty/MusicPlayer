@@ -109,14 +109,16 @@ public partial class MainViewModel
     {
         if (_musicBrowserDisposed) return;
         var albumKey = SelectedAlbum?.Key;
+        var albumPath = SelectedAlbum?.Tracks.FirstOrDefault()?.FilePath;
         var artistKey = SelectedArtist?.Key;
         var selectedPath = SelectedBrowseTrack?.FilePath;
-        // Album titles are scoped to the tagged artist so unrelated releases with identical titles stay separate.
-        Albums = Tracks.GroupBy(t => (Artist: MusicGroup.Normalize(MusicGroup.ArtistName(t)), Album: MusicGroup.Normalize(MusicGroup.AlbumName(t))))
+        var previousAlbums = Albums;
+        var regrouped = Tracks.GroupBy(MusicGroup.AlbumKey)
             .Select(group => new MusicGroup(MusicGroupKind.Album, MusicGroup.AlbumName(group.First()),
-                MusicGroup.ArtistName(group.First()), group.OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ThenBy(t => t.FilePath, StringComparer.OrdinalIgnoreCase).ToArray(), []))
-            .Select(ClassifyRelease)
+                MusicGroup.AlbumArtistName(group.First()), MusicGroup.OrderAlbumTracks(group), []))
+            .ToArray();
+        MigrateReleaseTypeOverrides(regrouped, previousAlbums);
+        Albums = regrouped.Select(ClassifyRelease)
             .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(g => g.Artist, StringComparer.CurrentCultureIgnoreCase).ToArray();
         Artists = Albums.GroupBy(g => MusicGroup.Normalize(g.Artist)).Select(group =>
         {
@@ -125,10 +127,50 @@ public partial class MainViewModel
                 artistAlbums.SelectMany(g => g.Tracks).ToArray(), artistAlbums);
         }).OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
         SelectedArtist = Artists.FirstOrDefault(g => g.Key == artistKey);
-        SelectedAlbum = Albums.FirstOrDefault(g => g.Key == albumKey);
+        SelectedAlbum = Albums.FirstOrDefault(g => g.Key == albumKey)
+            ?? (albumPath is null ? null : Albums.FirstOrDefault(g => g.Tracks.Any(t =>
+                string.Equals(t.FilePath, albumPath, StringComparison.OrdinalIgnoreCase))));
         SelectedBrowseTrack = BrowseTracks.FirstOrDefault(t => string.Equals(t.FilePath, selectedPath, StringComparison.OrdinalIgnoreCase));
         IdentifyArtists();
         NotifyMusicBrowser();
+    }
+
+    private void MigrateReleaseTypeOverrides(IReadOnlyList<MusicGroup> groups, IReadOnlyList<MusicGroup> previousGroups)
+    {
+        if (!CanEditReleaseType) return;
+        // File identity carries a manual choice through metadata backfill, even when a
+        // formerly untagged release gains an album artist, year, or MusicBrainz ID.
+        var previousKeys = previousGroups.SelectMany(g => g.Tracks.Select(t => (t.FilePath, g.Key)))
+            .ToLookup(t => t.FilePath, t => t.Key, StringComparer.OrdinalIgnoreCase);
+        var aliases = groups.ToDictionary(g => g.Key, g => g.Tracks
+            .SelectMany(t => previousKeys[t.FilePath].Append(MusicGroup.LegacyAlbumKey(t)))
+            .Where(key => key != g.Key && _releaseTypeOverrides.ContainsKey(key)).Distinct().ToArray());
+        try
+        {
+            foreach (var group in groups)
+            {
+                if (_releaseTypeOverrides.ContainsKey(group.Key)) continue;
+                var types = aliases[group.Key].Select(key => _releaseTypeOverrides[key]).Distinct().ToArray();
+                // Conflicting old performer groups have no unambiguous album-wide choice.
+                if (types.Length != 1) continue;
+                _releaseTypeStore?.SaveReleaseType(group.Key, types[0]);
+                _releaseTypeOverrides[group.Key] = types[0];
+            }
+            foreach (var key in aliases.Values.SelectMany(keys => keys).Distinct())
+            {
+                if (groups.Any(g => g.Key == key)) continue;
+                var targets = groups.Where(g => aliases[g.Key].Contains(key));
+                if (!targets.All(g => _releaseTypeOverrides.ContainsKey(g.Key))) continue;
+                // Write every destination before removing the old key, so retries are safe.
+                _releaseTypeStore?.SaveReleaseType(key, null);
+                _releaseTypeOverrides.Remove(key);
+            }
+        }
+        catch (Exception ex)
+        {
+            CanEditReleaseType = false;
+            ReleaseTypeError = $"Could not migrate release types: {ex.Message}";
+        }
     }
 
     private MusicGroup ClassifyRelease(MusicGroup group)

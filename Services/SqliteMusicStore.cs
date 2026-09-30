@@ -376,6 +376,10 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
         row.MusicBrainzReleaseId = track.MusicBrainzReleaseId;
         row.MusicBrainzReleaseGroupId = track.MusicBrainzReleaseGroupId;
         row.ReleaseTypeTag = track.ReleaseTypeTag;
+        row.DiscNumber = track.DiscNumber;
+        row.TrackNumber = track.TrackNumber;
+        row.Year = track.Year;
+        row.Genre = track.Genre;
         row.DurationTicks = track.Duration.Ticks;
         row.FileSize = track.FileSize;
         row.LastWriteTimeUtcTicks = track.LastWriteTimeUtcTicks;
@@ -430,6 +434,7 @@ public sealed class SqliteMusicStore : ILibraryStore, IPlaylistStore, IPlaybackS
         AlbumArtist = track.AlbumArtist, MusicBrainzReleaseId = track.MusicBrainzReleaseId,
         MusicBrainzReleaseGroupId = track.MusicBrainzReleaseGroupId,
         ReleaseTypeTag = track.ReleaseTypeTag,
+        DiscNumber = track.DiscNumber, TrackNumber = track.TrackNumber, Year = track.Year, Genre = track.Genre,
         MusicBrainzArtistId = track.MusicBrainzArtistId, MetadataVersion = track.MetadataVersion,
         FileSize = track.FileSize, LastWriteTimeUtcTicks = track.LastWriteTimeUtcTicks, IsMissing = track.IsMissing,
         ExplicitlyAddedToLibrary = track.ExplicitlyAddedToLibrary

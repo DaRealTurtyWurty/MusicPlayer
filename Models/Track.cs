@@ -8,7 +8,7 @@ public sealed class Track
 
     public string? Artist { get; init; }
     public string? MusicBrainzArtistId { get; init; }
-    public const int CurrentMetadataVersion = 2;
+    public const int CurrentMetadataVersion = 3;
     // Older entries are reread once to recover newly supported tags.
     public int MetadataVersion { get; init; } = CurrentMetadataVersion;
 
@@ -17,6 +17,10 @@ public sealed class Track
     public string? MusicBrainzReleaseId { get; init; }
     public string? MusicBrainzReleaseGroupId { get; init; }
     public string? ReleaseTypeTag { get; init; }
+    public uint DiscNumber { get; init; }
+    public uint TrackNumber { get; init; }
+    public uint Year { get; init; }
+    public string? Genre { get; init; }
 
     public TimeSpan Duration { get; init; }
 
@@ -31,6 +35,7 @@ public sealed class Track
     {
         FilePath = FilePath, Title = Title, Artist = Artist, Album = Album, Duration = Duration,
         ReleaseTypeTag = ReleaseTypeTag,
+        DiscNumber = DiscNumber, TrackNumber = TrackNumber, Year = Year, Genre = Genre,
         AlbumArtist = AlbumArtist, MusicBrainzReleaseId = MusicBrainzReleaseId,
         MusicBrainzReleaseGroupId = MusicBrainzReleaseGroupId,
         MusicBrainzArtistId = MusicBrainzArtistId, MetadataVersion = MetadataVersion,
