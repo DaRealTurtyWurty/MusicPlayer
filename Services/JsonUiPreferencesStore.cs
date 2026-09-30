@@ -11,6 +11,8 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MusicPlayer", "preferences.json");
 
     public LibraryWorkflowPreferences LoadLibraryWorkflow() => Load().LibraryWorkflow ?? new();
+    public CrossfadeOptions LoadCrossfade() => (Load().Crossfade ?? new()).Normalize();
+    public void SaveCrossfade(CrossfadeOptions options) => Save(Load() with { Crossfade = options.Normalize() });
     public ReplayGainOptions LoadReplayGain() => (Load().ReplayGain ?? new()).Normalize();
     public void SaveReplayGain(ReplayGainOptions options) => Save(Load() with { ReplayGain = options.Normalize() });
     public void SaveLibraryWorkflow(LibraryWorkflowPreferences preferences) => Save(Load() with { LibraryWorkflow = preferences });
@@ -110,5 +112,5 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
         double Volume = 100, double VolumeBeforeMute = 100,
         bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off,
         bool LyricsEnabled = true, DiscordPresenceOptions? DiscordPresence = null, string? OutputDeviceId = null, LibraryWorkflowPreferences? LibraryWorkflow = null,
-        bool GaplessPlaybackEnabled = true, ReplayGainOptions? ReplayGain = null);
+        bool GaplessPlaybackEnabled = true, ReplayGainOptions? ReplayGain = null, CrossfadeOptions? Crossfade = null);
 }

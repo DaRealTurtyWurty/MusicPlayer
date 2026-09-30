@@ -7,8 +7,20 @@ using NAudio.Wave.SampleProviders;
 
 namespace MusicPlayer.Services;
 
-public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAudioPlayer, IReplayGainAudioPlayer, IDisposable
+public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAudioPlayer, IReplayGainAudioPlayer, ICrossfadeAudioPlayer, IDisposable
 {
+    private CrossfadeOptions _crossfadeOptions = new();
+    public CrossfadeOptions CrossfadeOptions
+    {
+        get => _crossfadeOptions;
+        set
+        {
+            var options = (value ?? new()).Normalize();
+            if (_crossfadeOptions == options) return;
+            _crossfadeOptions = options;
+            if (_audioFile is not null) Seek(PresentationPosition);
+        }
+    }
     private ReplayGainOptions _replayGainOptions = new();
     private ReplayGainMetadata _currentGain = new();
     private ReplayGainMetadata _nextGain = new();
@@ -126,7 +138,7 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
             if (reader.Length == 0 || reader.TotalTime <= TimeSpan.Zero)
                 throw new InvalidDataException("The audio file contains no playable samples.");
             _nextGain = ReplayGainMetadata.Read(filePath);
-            _gaplessSource?.SetNext(WithReplayGain(reader, _nextGain));
+            _gaplessSource?.SetNext(WithReplayGain(reader, _nextGain), reader.TotalTime);
             _nextFile = reader;
             _nextPath = filePath;
         }
@@ -148,8 +160,8 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
         _currentGain = _nextGain;
         _nextFile = null;
         _nextPath = null;
-        _outputOrigin = -boundary;
-        _lastPresentationPosition = TimeSpan.Zero;
+        _outputOrigin = _gaplessSource.NextPosition - boundary;
+        _lastPresentationPosition = _gaplessSource.NextPosition;
         _gaplessSource.Commit();
         NextTrackStarted?.Invoke(this, EventArgs.Empty);
     }
@@ -217,11 +229,12 @@ public sealed class NAudioPlayer : IAudioPlayer, IAudioDevicePlayer, IGaplessAud
         try
         {
             var (id, fallback) = ResolveDevice();
-            _gaplessSource = new GaplessSampleProvider(WithReplayGain(_audioFile, _currentGain));
+            _gaplessSource = new GaplessSampleProvider(WithReplayGain(_audioFile, _currentGain),
+                _audioFile.TotalTime - _audioFile.CurrentTime, CrossfadeOptions.Enabled ? CrossfadeOptions.DurationSeconds : 0);
             if (_nextFile is not null)
             {
                 _nextFile.Position = 0;
-                _gaplessSource.SetNext(WithReplayGain(_nextFile, _nextGain));
+                _gaplessSource.SetNext(WithReplayGain(_nextFile, _nextGain), _nextFile.TotalTime);
             }
             _volumeProvider = new VolumeSampleProvider(_gaplessSource) { Volume = _volume };
             var source = new EndOfStreamWaveProvider(_volumeProvider.ToWaveProvider());

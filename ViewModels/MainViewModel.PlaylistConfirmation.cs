@@ -39,7 +39,7 @@ public partial class MainViewModel
             .Select(t => LibraryTrackKey(t.FilePath)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return playlist.Tracks.DistinctBy(t => LibraryTrackKey(t.FilePath), StringComparer.OrdinalIgnoreCase)
             .Where(t => !shared.Contains(LibraryTrackKey(t.FilePath)) && !t.ExplicitlyAddedToLibrary &&
-                (!_trackCatalog.TryGetValue(LibraryTrackKey(t.FilePath), out var known) || !known.ExplicitlyAddedToLibrary)).ToArray();
+                !_library.IsExplicitTrack(t)).ToArray();
     }
 
     partial void OnPlaylistPendingDeletionChanged(Playlist? value)
@@ -65,7 +65,7 @@ public partial class MainViewModel
         {
             // Do not delete based on stale membership after an earlier failed direct import.
             SaveLibrary();
-            if (_librarySavePending) throw new InvalidOperationException("Library changes could not be saved. Try again before deleting this playlist.");
+            if (_library.SavePending) throw new InvalidOperationException("Library changes could not be saved. Try again before deleting this playlist.");
             if (_playlistStore is ILibraryMembershipStore membership)
                 membership.DeletePlaylist(playlist.Id, KeepPlaylistSongsInLibrary);
             else

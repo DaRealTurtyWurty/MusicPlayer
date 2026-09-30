@@ -5,22 +5,33 @@ namespace MusicPlayer.Services;
 
 // Reads across a track boundary in the same output buffer. The UI commits the
 // transition separately, when the output clock reaches Boundary.
-internal sealed class GaplessSampleProvider(ISampleProvider source) : ISampleProvider
+internal sealed class GaplessSampleProvider(ISampleProvider source, TimeSpan? remaining = null, double crossfadeSeconds = 0) : ISampleProvider
 {
     private readonly object _gate = new();
     private ISampleProvider _current = source;
     private ISampleProvider? _next;
     private long _samples;
     private TimeSpan? _boundary;
+    private long _remainingFrames = remaining is { } time ? (long)(time.TotalSeconds * source.WaveFormat.SampleRate) : long.MaxValue;
+    private long _nextFrames;
+    private long _fadeFrames;
+    private long _fadePosition;
+    private bool _fading;
+    private float[] _mixBuffer = [];
+    public TimeSpan NextPosition { get; private set; }
     public WaveFormat WaveFormat { get; } = source.WaveFormat;
     public TimeSpan? Boundary { get { lock (_gate) return _boundary; } }
 
-    public bool SetNext(ISampleProvider? next)
+    public bool SetNext(ISampleProvider? next, TimeSpan? duration = null)
     {
         lock (_gate)
         {
-            if (_boundary is not null) return false;
+            if (_boundary is not null || _fading) return false;
             _next = next is null ? null : Convert(next, WaveFormat);
+            _nextFrames = duration is { } time ? (long)(time.TotalSeconds * WaveFormat.SampleRate) : long.MaxValue;
+            // Short tracks retain a solo section before/after the overlap.
+            _fadeFrames = next is null || remaining is null || duration is null ? 0 :
+                Math.Max(0, Math.Min((long)(crossfadeSeconds * WaveFormat.SampleRate), Math.Min(_remainingFrames / 2, _nextFrames / 2)));
             return true;
         }
     }
@@ -48,16 +59,68 @@ internal sealed class GaplessSampleProvider(ISampleProvider source) : ISamplePro
             var total = 0;
             while (total < buffer.Length)
             {
-                var read = _current.Read(buffer[total..]);
+                var channels = WaveFormat.Channels;
+                if (_next is not null && _fadeFrames > 0 && _remainingFrames <= _fadeFrames) _fading = true;
+                if (_fading)
+                {
+                    var count = (int)Math.Min((buffer.Length - total) / channels, _fadeFrames - _fadePosition) * channels;
+                    if (count == 0) break;
+                    var target = buffer.Slice(total, count);
+                    target.Clear();
+                    ReadFully(_current, target);
+                    if (_mixBuffer.Length < count) _mixBuffer = new float[count];
+                    var incoming = _mixBuffer.AsSpan(0, count);
+                    incoming.Clear();
+                    ReadFully(_next!, incoming);
+                    for (var i = 0; i < count; i++)
+                    {
+                        var weight = (float)((_fadePosition + i / channels + 1) / (double)_fadeFrames);
+                        target[i] = target[i] * (1 - weight) + incoming[i] * weight;
+                    }
+                    _fadePosition += count / channels;
+                    total += count;
+                    _samples += count;
+                    if (_fadePosition == _fadeFrames)
+                    {
+                        NextPosition = TimeSpan.FromSeconds(_fadeFrames / (double)WaveFormat.SampleRate);
+                        SwitchToNext();
+                    }
+                    continue;
+                }
+                var available = buffer.Length - total;
+                if (_next is not null && _fadeFrames > 0)
+                    available = (int)Math.Min(available, (_remainingFrames - _fadeFrames) * channels);
+                var read = _current.Read(buffer.Slice(total, available));
                 total += read;
                 _samples += read;
+                _remainingFrames = Math.Max(0, _remainingFrames - read / channels);
                 if (read != 0) continue;
                 if (_next is null) break;
-                _boundary = TimeSpan.FromSeconds(_samples / (double)(WaveFormat.SampleRate * WaveFormat.Channels));
-                _current = _next;
-                _next = null;
+                NextPosition = TimeSpan.Zero;
+                SwitchToNext();
             }
             return total;
+        }
+    }
+
+    private void SwitchToNext()
+    {
+        _boundary = TimeSpan.FromSeconds(_samples / (double)(WaveFormat.SampleRate * WaveFormat.Channels));
+        _current = _next!;
+        _next = null;
+        _remainingFrames = Math.Max(0, _nextFrames - (_fading ? _fadeFrames : 0));
+        _fading = false;
+        _fadePosition = _fadeFrames = 0;
+    }
+
+    private static void ReadFully(ISampleProvider provider, Span<float> buffer)
+    {
+        var total = 0;
+        while (total < buffer.Length)
+        {
+            var read = provider.Read(buffer[total..]);
+            if (read == 0) break;
+            total += read;
         }
     }
 }

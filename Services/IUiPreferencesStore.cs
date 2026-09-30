@@ -4,6 +4,8 @@ namespace MusicPlayer.Services;
 
 public interface IUiPreferencesStore
 {
+    CrossfadeOptions LoadCrossfade() => new();
+    void SaveCrossfade(CrossfadeOptions options) { }
     ReplayGainOptions LoadReplayGain() => new();
     void SaveReplayGain(ReplayGainOptions options) { }
     LibraryWorkflowPreferences LoadLibraryWorkflow() => new();

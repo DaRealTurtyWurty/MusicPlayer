@@ -21,9 +21,7 @@ public partial class MainViewModel
         try
         {
             var session = store.LoadSession();
-            foreach (var entry in session.History) _playbackHistory.Push((entry.Track, entry.Recycled));
-            RefreshTimelineHistory();
-            PreviousCommand.NotifyCanExecuteChanged();
+            _queue.RestoreHistory(session.History.Select(entry => (entry.Track, entry.Recycled)));
             foreach (var track in session.Queue) Queue.Add(track);
             if (session.CurrentTrack is { } current && LoadTrack(current, playImmediately: false, rememberCurrent: false))
                 PositionSeconds = Math.Clamp(session.Position.TotalSeconds, 0, DurationSeconds);
@@ -61,7 +59,7 @@ public partial class MainViewModel
             if (_sessionDirty)
                 _playbackSessionStore.SaveSession(new PlaybackSession(CurrentTrack, position, Queue.ToArray())
                 {
-                    History = _playbackHistory.Reverse()
+                    History = _queue.History.Reverse()
                         .Select(entry => new PlaybackHistoryEntry(entry.Track, entry.Recycled)).ToArray()
                 });
             else if (position != _savedSessionPosition)

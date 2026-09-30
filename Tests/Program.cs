@@ -8,6 +8,14 @@ internal static partial class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--crossfade-smoke"])
+        {
+            var crossfadeApp = new App(suppressStartup: true);
+            crossfadeApp.InitializeComponent();
+            crossfadeApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            DispatcherTest.Run(CheckCrossfadeAsync);
+            return;
+        }
         if (args is ["--replaygain-smoke"])
         {
             var replayGainApp = new App(suppressStartup: true);

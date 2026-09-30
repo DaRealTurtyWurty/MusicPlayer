@@ -57,23 +57,7 @@ public partial class MainViewModel
         if (e.IsPlaying) IsPlaybackStopped = false;
     }
 
-    private bool TryPlaybackAction(Action action)
-    {
-        try
-        {
-            action();
-            PlaybackError = null;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            IsPlaying = false;
-            PlaybackError = $"Could not control playback: {ex.Message}";
-            return false;
-        }
-    }
-
-    private bool OutputIsPlaying => _audioPlayer is not IAudioDevicePlayer player || player.IsOutputPlaying;
+    private bool TryPlaybackAction(Action action) => _playback.TryPlaybackAction(action);
 
     private void DisposeAudioDevices()
     {

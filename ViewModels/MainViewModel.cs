@@ -4,10 +4,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MusicPlayer.Models;
 using MusicPlayer.Services;
+using MusicPlayer.ViewModels.Coordination;
 
 namespace MusicPlayer.ViewModels;
 
-public partial class MainViewModel : ObservableObject, IDisposable
+public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackState, IQueuePlaybackState, ILibraryState
 {
     private readonly IFilePickerService _filePickerService;
     private readonly IFolderPickerService _folderPickerService;
@@ -15,10 +16,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private readonly ILibraryScanner _libraryScanner;
     private readonly IAudioPlayer _audioPlayer;
     private readonly IFileLocationService _fileLocationService;
-    private readonly Random _random;
     private readonly IUiPreferencesStore? _uiPreferencesStore;
     public LyricsViewModel Lyrics { get; }
-    private readonly Stack<(Track Track, bool Recycled)> _playbackHistory = new();
+    private readonly PlaybackCoordinator _playback;
+    private readonly QueueCoordinator _queue;
+    private readonly LibraryCoordinator _library;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PlaybackStatus))]
@@ -115,8 +117,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(DurationText))]
     private double durationSeconds;
 
-    public ObservableCollection<Track> Tracks { get; } = new LibraryTrackCollection();
-    public ObservableCollection<Track> Queue { get; } = [];
+    public ObservableCollection<Track> Tracks => _library.Tracks;
+    public ObservableCollection<Track> Queue => _queue.Queue;
     public string QueueSummary => $"{Queue.Count} upcoming {(Queue.Count == 1 ? "track" : "tracks")}";
     public bool IsQueueEmpty => Queue.Count == 0;
 
@@ -158,9 +160,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
         _libraryScanner = libraryScanner;
         _audioPlayer = audioPlayer;
         _fileLocationService = fileLocationService ?? new FileLocationService();
-        _random = random ?? Random.Shared;
+        _queue = new QueueCoordinator(this, random ?? Random.Shared);
+        _playback = new PlaybackCoordinator(this, audioPlayer, metadataService);
+        _library = new LibraryCoordinator(this, libraryStore);
         _uiPreferencesStore = uiPreferencesStore;
         InitializeReplayGain();
+        InitializeCrossfade();
         isGaplessPlaybackEnabled = _uiPreferencesStore?.LoadGaplessPlaybackEnabled() ?? true;
         InitializeAudioDevices();
         _discordPresenceOptions = _uiPreferencesStore?.LoadDiscordPresence() ?? new();
@@ -181,11 +186,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         _positionTimer.Tick += OnPositionTimerTick;
         _positionTimer.Start();
-        _audioPlayer.PlaybackEnded += OnPlaybackEnded;
-        if (_audioPlayer is IGaplessAudioPlayer gapless) gapless.NextTrackStarted += OnGaplessTrackStarted;
-        Queue.CollectionChanged += OnGaplessQueueChanged;
+        _playback.Initialize();
         Queue.CollectionChanged += OnTimelineQueueChanged;
-        InitializeLibrary(libraryStore);
+        InitializeLibrary();
         InitializePages(playlistStore);
         InitializeLibraryPlaylists();
         InitializePlaybackSession(playbackSessionStore);
@@ -213,29 +216,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void Play()
-    {
-        if (_reloadCurrentTrack && CurrentTrack is { } relocated)
-        {
-            var position = PositionSeconds;
-            if (LoadTrack(relocated, playImmediately: true, rememberCurrent: false))
-                PositionSeconds = Math.Clamp(position, 0, DurationSeconds);
-            return;
-        }
-        if (CurrentTrack is null)
-        {
-            Next();
-            return;
-        }
-
-        if (!TryPlaybackAction(() =>
-            {
-                if (_audioPlayer.Position >= _audioPlayer.Duration) _audioPlayer.Seek(TimeSpan.Zero);
-                _audioPlayer.Play();
-            })) return;
-        IsPlaybackStopped = false;
-        IsPlaying = OutputIsPlaying;
-    }
+    private void Play() => _playback.Play();
 
     private bool CanTogglePlayback() => CurrentTrack is not null || Queue.Count > 0;
 
@@ -284,21 +265,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         PrepareGaplessTrack();
     }
 
-    private void ShuffleQueue()
-    {
-        // Track indices, rather than track identity, preserve selection for duplicate songs.
-        var selectedIndex = SelectedQueueIndex;
-        for (var i = Queue.Count - 1; i > 0; i--)
-        {
-            var j = _random.Next(i + 1);
-            if (i == j) continue;
-            (Queue[i], Queue[j]) = (Queue[j], Queue[i]);
-            if (selectedIndex == i) selectedIndex = j;
-            else if (selectedIndex == j) selectedIndex = i;
-        }
-
-        SelectedQueueIndex = selectedIndex;
-    }
+    private void ShuffleQueue() => _queue.ShuffleQueue();
 
     [RelayCommand]
     private void CycleRepeat() => RepeatMode = RepeatMode switch
@@ -313,146 +280,39 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(HasLibraryTracks))]
     private void PlayAll() => StartPlaybackSession(LibraryTracks.Cast<Track>());
 
-    private void StartPlaybackSession(IEnumerable<Track> tracks)
-    {
-        var sessionTracks = tracks.ToArray();
-        _playbackHistory.Clear();
-        RefreshTimelineHistory();
-        PreviousCommand.NotifyCanExecuteChanged();
-        Queue.Clear();
-        foreach (var track in sessionTracks)
-            Queue.Add(track);
-        if (IsShuffleEnabled)
-            ShuffleQueue();
-        // A new library session must not recycle the previously playing track.
-        AdvanceQueue(recycleCurrent: false);
-    }
+    private void StartPlaybackSession(IEnumerable<Track> tracks) => _queue.StartPlaybackSession(tracks);
 
     private bool HasQueuedTracks() => Queue.Count > 0;
 
-    private bool CanAdvance() => HasQueuedTracks() ||
-                                 (RepeatMode == PlaybackRepeatMode.All && CurrentTrack is not null);
+    private bool CanAdvance() => _queue.CanAdvance;
 
-    private bool CanGoPrevious() => CurrentTrack is not null || _playbackHistory.Count > 0;
+    private bool CanGoPrevious() => _queue.CanGoPrevious;
 
     [RelayCommand(CanExecute = nameof(CanGoPrevious))]
-    private void Previous()
-    {
-        if (CurrentTrack is not null && (_audioPlayer.Position.TotalSeconds > 3 || _playbackHistory.Count == 0))
-        {
-            if (!TryPlaybackAction(() => _audioPlayer.Seek(TimeSpan.Zero))) return;
-            PositionSeconds = 0;
-            Play();
-            return;
-        }
+    private void Previous() => _queue.Previous();
 
-        var interruptedTrack = CurrentTrack;
-        while (_playbackHistory.TryPop(out var previous))
-        {
-            RefreshTimelineHistory();
-            // Repeat-all places the played entry at the tail. Pull it back out when
-            // navigating backwards, so going forward does not grow the repeat cycle.
-            if (previous.Recycled && Queue.Count > 0 &&
-                string.Equals(Queue[^1].FilePath, previous.Track.FilePath, StringComparison.OrdinalIgnoreCase))
-                Queue.RemoveAt(Queue.Count - 1);
-            if (!LoadTrack(previous.Track, playImmediately: true, rememberCurrent: false))
-                continue;
-            if (interruptedTrack is not null)
-                Queue.Insert(0, interruptedTrack);
-            PreviousCommand.NotifyCanExecuteChanged();
-            return;
-        }
+    private void RememberTrack(Track? track, bool recycled = false) => _queue.RememberTrack(track, recycled);
 
-        if (interruptedTrack is not null)
-            LoadTrack(interruptedTrack, playImmediately: true, rememberCurrent: false);
-        PreviousCommand.NotifyCanExecuteChanged();
-    }
-
-    private void RememberTrack(Track? track, bool recycled = false)
-    {
-        if (track is null) return;
-        _playbackHistory.Push((track, recycled));
-        RefreshTimelineHistory();
-        PreviousCommand.NotifyCanExecuteChanged();
-    }
-
-    private bool HasQueueSelection() => SelectedQueueIndex >= 0 && SelectedQueueIndex < Queue.Count;
-    private bool CanMoveUp() => HasQueueSelection() && SelectedQueueIndex > 0;
-    private bool CanMoveDown() => HasQueueSelection() && SelectedQueueIndex < Queue.Count - 1;
+    private bool HasQueueSelection() => _queue.HasSelection;
+    private bool CanMoveUp() => _queue.CanMoveUp;
+    private bool CanMoveDown() => _queue.CanMoveDown;
 
     [RelayCommand(CanExecute = nameof(CanAdvance))]
     private void Next() => AdvanceQueue(recycleCurrent: true);
 
-    private void AdvanceQueue(bool recycleCurrent)
-    {
-        var previous = CurrentTrack;
-        var recycled = recycleCurrent && RepeatMode == PlaybackRepeatMode.All && previous is not null;
-        if (recycled)
-            Queue.Add(previous!);
-
-        // Unreadable tracks should not prevent the rest of the queue from playing.
-        // Recycle only once per advance so a queue of failed files cannot loop forever.
-        var skipped = new List<string>();
-        while (Queue.Count > 0)
-        {
-            var track = Queue[0];
-            Queue.RemoveAt(0);
-            if (LoadTrack(track, playImmediately: true, rememberCurrent: false))
-            {
-                if (recycleCurrent)
-                    RememberTrack(previous, recycled);
-                if (skipped.Count > 0) PlaybackError = string.Join(Environment.NewLine, skipped);
-                return;
-            }
-            if (PlaybackError is { } error) skipped.Add(error);
-        }
-        if (skipped.Count > 0) PlaybackError = string.Join(Environment.NewLine, skipped);
-        if (recycleCurrent && CurrentTrack is null)
-            RememberTrack(previous, recycled);
-    }
+    private void AdvanceQueue(bool recycleCurrent) => _queue.AdvanceQueue(recycleCurrent);
 
     [RelayCommand(CanExecute = nameof(HasQueueSelection))]
-    private void PlayQueuedTrack()
-    {
-        if (!HasQueueSelection()) return;
-        var track = Queue[SelectedQueueIndex];
-        Queue.RemoveAt(SelectedQueueIndex);
-        var previous = CurrentTrack;
-        var recycled = RepeatMode == PlaybackRepeatMode.All && previous is not null;
-        if (recycled)
-            Queue.Add(previous!);
-        var loaded = LoadTrack(track, playImmediately: true, rememberCurrent: false);
-        RememberTrack(previous, recycled);
-        if (!loaded)
-            AdvanceQueue(recycleCurrent: false);
-    }
+    private void PlayQueuedTrack() => _queue.PlayQueuedTrack();
 
     [RelayCommand(CanExecute = nameof(HasQueueSelection))]
-    private void RemoveFromQueue()
-    {
-        if (!HasQueueSelection()) return;
-        var index = SelectedQueueIndex;
-        Queue.RemoveAt(index);
-        SelectedQueueIndex = Math.Min(index, Queue.Count - 1);
-    }
+    private void RemoveFromQueue() => _queue.RemoveFromQueue();
 
     [RelayCommand(CanExecute = nameof(CanMoveUp))]
-    private void MoveQueueUp()
-    {
-        if (!CanMoveUp()) return;
-        var index = SelectedQueueIndex;
-        Queue.Move(index, index - 1);
-        SelectedQueueIndex = index - 1;
-    }
+    private void MoveQueueUp() => _queue.MoveQueueUp();
 
     [RelayCommand(CanExecute = nameof(CanMoveDown))]
-    private void MoveQueueDown()
-    {
-        if (!CanMoveDown()) return;
-        var index = SelectedQueueIndex;
-        Queue.Move(index, index + 1);
-        SelectedQueueIndex = index + 1;
-    }
+    private void MoveQueueDown() => _queue.MoveQueueDown();
 
     [RelayCommand(CanExecute = nameof(HasQueuedTracks))]
     private void ClearQueue()
@@ -483,82 +343,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         MoveQueueDownCommand.NotifyCanExecuteChanged();
     }
 
-    private void OnPlaybackEnded(object? sender, EventArgs e)
-    {
-        IsPlaybackStopped = true;
-        IsPlaying = false;
-        if (RepeatMode == PlaybackRepeatMode.One && CurrentTrack is not null)
-        {
-            if (LoadTrack(CurrentTrack, playImmediately: true, rememberCurrent: false))
-                return;
-        }
-
-        Next();
-    }
-
-    private bool LoadTrack(Track track, bool playImmediately, bool rememberCurrent = true)
-    {
-        var previous = CurrentTrack;
-        try
-        {
-            // Saved tracks keep metadata; artwork is read from the music file on demand.
-            if (track.ArtworkData is null && System.IO.File.Exists(track.FilePath))
-            {
-                try
-                {
-                    track = _metadataService.ReadTrack(track.FilePath);
-                }
-                catch
-                {
-                    /* Playback can still succeed when tags cannot be read. */
-                }
-            }
-
-            _audioPlayer.Load(track.FilePath);
-            _reloadCurrentTrack = false;
-            CurrentTrack = track;
-            PlaybackError = null;
-
-            DurationSeconds = _audioPlayer.Duration.TotalSeconds;
-            PositionSeconds = 0;
-
-            PrepareGaplessTrack();
-            if (playImmediately)
-                _audioPlayer.Play();
-            IsPlaybackStopped = false;
-            IsPlaying = playImmediately && OutputIsPlaying;
-            if (rememberCurrent)
-                RememberTrack(previous);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            IsPlaying = false;
-            CurrentTrack = null;
-            DurationSeconds = 0;
-            PositionSeconds = 0;
-            PlaybackError = $"Could not play {track.Title}: {ex.Message}";
-            if (rememberCurrent) RememberTrack(previous);
-            return false;
-        }
-    }
+    private bool LoadTrack(Track track, bool playImmediately, bool rememberCurrent = true) => _playback.LoadTrack(track, playImmediately, rememberCurrent);
 
     [RelayCommand]
-    private void Pause()
-    {
-        if (!TryPlaybackAction(_audioPlayer.Pause)) return;
-        IsPlaybackStopped = false;
-        IsPlaying = false;
-    }
+    private void Pause() => _playback.Pause();
 
     [RelayCommand]
-    private void Stop()
-    {
-        if (!TryPlaybackAction(_audioPlayer.Stop)) return;
-        IsPlaybackStopped = true;
-        IsPlaying = false;
-        PositionSeconds = 0;
-    }
+    private void Stop() => _playback.Stop();
 
     private static string FormatTime(TimeSpan time)
     {
@@ -601,9 +392,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
         DisposeLibraryMaintenance();
         DisposePlaybackSession();
         _positionTimer.Stop();
-        _audioPlayer.PlaybackEnded -= OnPlaybackEnded;
-        if (_audioPlayer is IGaplessAudioPlayer gapless) gapless.NextTrackStarted -= OnGaplessTrackStarted;
-        Queue.CollectionChanged -= OnGaplessQueueChanged;
+        _positionTimer.Tick -= OnPositionTimerTick;
+        _playback.Dispose();
+        Queue.CollectionChanged -= OnTimelineQueueChanged;
         DisposeAudioDevices();
         DisposeLibrary();
         if (SelectedPlaylist is not null)

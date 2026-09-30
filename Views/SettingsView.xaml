@@ -14,6 +14,15 @@
              AutomationProperties.Name="Gapless playback" />
    <TextBlock Text="Play consecutive tracks without a pause between them. Changes apply immediately."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
+   <CheckBox x:Name="CrossfadeEnabledCheckBox" Content="Crossfade between tracks"
+             IsChecked="{Binding IsCrossfadeEnabled, Mode=TwoWay}" AutomationProperties.Name="Enable crossfade" />
+   <StackPanel IsEnabled="{Binding IsCrossfadeEnabled}">
+    <TextBlock Text="{Binding CrossfadeDurationSeconds, StringFormat='Crossfade duration: {0:0} seconds'}" Margin="0,12,0,6" />
+    <Slider Minimum="1" Maximum="12" TickFrequency="1" IsSnapToTickEnabled="True" Width="300" HorizontalAlignment="Left"
+            Value="{Binding CrossfadeDurationSeconds, Mode=TwoWay}" AutomationProperties.Name="Crossfade duration in seconds" />
+   </StackPanel>
+   <TextBlock Text="Fade out the ending song while fading in the next queued song. Overrides gapless playback while enabled. Short songs use a shorter fade. Settings are saved automatically; changes apply during playback."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
    <TextBlock Text="ReplayGain" FontSize="18" Margin="0,0,0,12" />
    <CheckBox x:Name="ReplayGainEnabledCheckBox" Content="Normalize volume with ReplayGain"
              IsChecked="{Binding IsReplayGainEnabled, Mode=TwoWay}" AutomationProperties.Name="Enable ReplayGain" />

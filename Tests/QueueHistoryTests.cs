@@ -11,6 +11,7 @@ internal static partial class Program
 {
     private static void CheckQueueHistory()
     {
+        CheckCoordinatorLifecycle();
         var player = new FakePlayer();
         using var vm = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), player);
         Check(vm.IsQueueTimelineEmpty, "Timeline starts empty");

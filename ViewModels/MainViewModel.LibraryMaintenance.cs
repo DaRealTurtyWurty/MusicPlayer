@@ -36,8 +36,8 @@ public partial class MainViewModel
     {
         _libraryRefreshService = service;
         _trackMatchPicker = matchPicker;
-        _maintenanceStore = _libraryStore as ILibraryMaintenanceStore;
-        if (service is null || !_canSaveLibrary) return;
+        _maintenanceStore = _library.Store as ILibraryMaintenanceStore;
+        if (service is null || !_library.CanSave) return;
         try { _musicFolders.AddRange(_maintenanceStore?.LoadMusicFolders() ?? []); }
         catch (Exception ex) { LibraryError = $"Could not load watched folders: {ex.Message}"; }
         RefreshWatchedFolders();
@@ -70,7 +70,7 @@ public partial class MainViewModel
         if (AutomaticScanning) await RefreshLibraryAsync();
     }
 
-    private bool CanRefreshLibrary() => _libraryRefreshService is not null && _canSaveLibrary &&
+    private bool CanRefreshLibrary() => _libraryRefreshService is not null && _library.CanSave &&
         !IsRefreshingLibrary && !IsLocatingTrack && !IsImportingPlaylist;
 
     [RelayCommand(CanExecute = nameof(CanRefreshLibrary))]
@@ -91,7 +91,7 @@ public partial class MainViewModel
             _maintenanceCancellation.Token.ThrowIfCancellationRequested();
             ApplyTrackUpdates(result.Updates.ToDictionary(t => LibraryTrackKey(t.FilePath), StringComparer.OrdinalIgnoreCase));
             var added = AddLibraryTracks(result.Added, save: false, explicitlyAdded: true);
-            if (result.Updates.Count > 0 || added > 0) _librarySavePending = true;
+            if (result.Updates.Count > 0 || added > 0) _library.SavePending = true;
             // Retain the pending flag after a failed write so a later scan retries it.
             await SaveLibraryAsync();
             var missing = Tracks.Count(t => t.IsMissing);
@@ -249,22 +249,13 @@ public partial class MainViewModel
         ToastMessage = null;
     }
 
-    private IEnumerable<Track> KnownPlaybackTracks() => _trackCatalog.Values.Concat(Tracks).Concat(Playlists.SelectMany(p => p.Tracks)).Concat(Queue)
-        .Concat(_playbackHistory.Select(e => e.Track)).Concat(CurrentTrack is { } current ? [current] : []);
+    private IEnumerable<Track> KnownPlaybackTracks() => _library.KnownTracks.Concat(Tracks).Concat(Playlists.SelectMany(p => p.Tracks)).Concat(Queue)
+        .Concat(_queue.History.Select(e => e.Track)).Concat(CurrentTrack is { } current ? [current] : []);
 
     private void ApplyTrackUpdates(IReadOnlyDictionary<string, Track> updates)
     {
         if (updates.Count == 0) return;
-        foreach (var (oldPath, replacement) in updates)
-        {
-            if (_trackCatalog.TryGetValue(oldPath, out var original))
-                replacement.ExplicitlyAddedToLibrary |= original.ExplicitlyAddedToLibrary;
-            var newPath = LibraryTrackKey(replacement.FilePath);
-            if (_trackCatalog.TryGetValue(newPath, out var destination))
-                replacement.ExplicitlyAddedToLibrary |= destination.ExplicitlyAddedToLibrary;
-            if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase)) _trackCatalog.Remove(oldPath);
-            _trackCatalog[newPath] = replacement;
-        }
+        _library.UpdateCatalog(updates);
         Track Replace(Track track) => updates.TryGetValue(LibraryTrackKey(track.FilePath), out var updated) ? updated : track;
         var selected = SelectedTrack is { } selection ? Replace(selection) : null;
         var queueIndex = SelectedQueueIndex;
@@ -272,7 +263,7 @@ public partial class MainViewModel
         _applyingTrackUpdates = true;
         try
         {
-            ((LibraryTrackCollection)Tracks).ReplaceAll(Tracks.Select(Replace)
+            _library.Tracks.ReplaceAll(Tracks.Select(Replace)
                 .DistinctBy(t => LibraryTrackKey(t.FilePath), StringComparer.OrdinalIgnoreCase).ToArray());
             foreach (var playlist in Playlists)
             {
@@ -281,16 +272,13 @@ public partial class MainViewModel
             }
             for (var i = 0; i < Queue.Count; i++)
                 if (!ReferenceEquals(Queue[i], Replace(Queue[i]))) Queue[i] = Replace(Queue[i]);
-            var history = _playbackHistory.Reverse().Select(e => (Track: Replace(e.Track), e.Recycled)).ToArray();
-            _playbackHistory.Clear();
-            foreach (var entry in history) _playbackHistory.Push(entry);
+            _queue.ReplaceHistoryTracks(Replace);
             if (CurrentTrack is { } current) CurrentTrack = Replace(current);
             RefreshTimelineHistory();
             SelectedTrack = selected;
             SelectedQueueIndex = queueIndex;
             SelectedPlaylistTrackIndex = playlistIndex;
-            _playlistTrackPaths = Playlists.SelectMany(p => p.Tracks).Select(t => LibraryTrackKey(t.FilePath))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _library.UpdatePlaylistPaths();
             LibraryTracks.Refresh();
         }
         finally { _applyingTrackUpdates = false; }

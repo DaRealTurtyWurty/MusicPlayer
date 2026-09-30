@@ -119,7 +119,7 @@ public partial class MainViewModel
         try
         {
             for (var i = 0; i < _timelinePrefixCount; i++) QueueTimeline.RemoveAt(0);
-            var prefix = _playbackHistory.Reverse()
+            var prefix = _queue.History.Reverse()
                 .Select(entry => new QueueEntry(entry.Track, QueueEntryKind.History)).ToList();
             if (CurrentTrack is { } track) prefix.Add(new QueueEntry(track, QueueEntryKind.Current));
             _timelinePrefixCount = prefix.Count;
