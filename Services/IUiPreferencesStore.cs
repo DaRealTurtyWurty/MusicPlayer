@@ -24,6 +24,8 @@ public interface IUiPreferencesStore
     void SavePlaybackModes(bool shuffleEnabled, PlaybackRepeatMode repeatMode);
     bool LoadLyricsEnabled();
     void SaveLyricsEnabled(bool enabled);
+    double LoadLyricsFontSize() => 25;
+    void SaveLyricsFontSize(double fontSize) { }
     DiscordPresenceOptions LoadDiscordPresence();
     void SaveDiscordPresence(DiscordPresenceOptions options);
 }

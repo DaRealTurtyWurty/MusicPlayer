@@ -31,6 +31,10 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
 
     public void SaveLyricsEnabled(bool enabled) => Save(Load() with { LyricsEnabled = enabled });
 
+    public double LoadLyricsFontSize() => NormalizeLyricsFontSize(Load().LyricsFontSize);
+    public void SaveLyricsFontSize(double fontSize) => Save(Load() with { LyricsFontSize = NormalizeLyricsFontSize(fontSize) });
+    private static double NormalizeLyricsFontSize(double fontSize) => double.IsFinite(fontSize) ? Math.Clamp(fontSize, 16, 40) : 25;
+
     public AppPage LoadSelectedPage()
     {
         var page = Load().SelectedPage;
@@ -112,5 +116,6 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
         double Volume = 100, double VolumeBeforeMute = 100,
         bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off,
         bool LyricsEnabled = true, DiscordPresenceOptions? DiscordPresence = null, string? OutputDeviceId = null, LibraryWorkflowPreferences? LibraryWorkflow = null,
-        bool GaplessPlaybackEnabled = true, ReplayGainOptions? ReplayGain = null, CrossfadeOptions? Crossfade = null);
+        bool GaplessPlaybackEnabled = true, ReplayGainOptions? ReplayGain = null, CrossfadeOptions? Crossfade = null,
+        double LyricsFontSize = 25);
 }

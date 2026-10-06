@@ -19,6 +19,7 @@ public partial class NowPlayingView : UserControl
     private bool _following = true;
     private bool _resettingScrollAnimation;
     private DispatcherOperation? _pendingFollow;
+    private LyricsSettingsWindow? _lyricsSettingsWindow;
 
     public NowPlayingView() => InitializeComponent();
 
@@ -31,6 +32,7 @@ public partial class NowPlayingView : UserControl
 
     private void View_Unloaded(object sender, RoutedEventArgs e)
     {
+        _lyricsSettingsWindow?.Close();
         _attached = false;
         IsVisibleChanged -= View_IsVisibleChanged;
         if (_main is not null) _main.PropertyChanged -= Main_PropertyChanged;
@@ -44,6 +46,7 @@ public partial class NowPlayingView : UserControl
 
     private void View_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        _lyricsSettingsWindow?.Close();
         if (_attached) AttachLyrics();
     }
 
@@ -71,6 +74,7 @@ public partial class NowPlayingView : UserControl
             ResumeFollowing();
         }
         if (e.PropertyName is nameof(LyricsViewModel.ActiveLine) or nameof(LyricsViewModel.ActiveLines)) ScheduleFollow();
+        if (e.PropertyName == nameof(LyricsViewModel.FontSize)) ScheduleFollow();
     }
 
     private void Main_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -197,6 +201,11 @@ public partial class NowPlayingView : UserControl
     private void Lyrics_ManualScroll(object sender, MouseWheelEventArgs e)
     {
         if (e.Delta == 0 || LyricsScroll.ScrollableHeight <= 0 || !LyricsScroll.IsVisible) return;
+        for (var node = e.OriginalSource as DependencyObject; node is Visual; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, LyricsScroll)) break;
+            if (node is Slider || node is Button && !LyricsScroll.IsAncestorOf(node)) return;
+        }
         PauseFollowing();
         var distance = SystemParameters.WheelScrollLines < 0
             ? LyricsScroll.ViewportHeight : SystemParameters.WheelScrollLines * 24d;
@@ -217,4 +226,18 @@ public partial class NowPlayingView : UserControl
 
     private void Lyric_Click(object sender, RoutedEventArgs e) => ResumeFollowing();
     private void ResumeFollowing_Click(object sender, RoutedEventArgs e) => ResumeFollowing();
+
+    private void LyricsSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lyricsSettingsWindow is not null)
+        {
+            _lyricsSettingsWindow.Activate();
+            return;
+        }
+        if (DataContext is not MainViewModel main) return;
+        var window = new LyricsSettingsWindow(main.Lyrics) { Owner = Window.GetWindow(this) };
+        _lyricsSettingsWindow = window;
+        window.Closed += (_, _) => _lyricsSettingsWindow = null;
+        window.Show();
+    }
 }

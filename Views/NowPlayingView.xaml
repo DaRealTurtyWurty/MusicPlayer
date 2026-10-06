@@ -91,7 +91,12 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Lyrics" FontSize="14" FontWeight="SemiBold" Margin="8,8,0,18" />
+                    <DockPanel x:Name="LyricsHeader" Margin="8,4,8,10">
+                        <Button x:Name="LyricsSettingsButton" DockPanel.Dock="Right" Content="Options…"
+                                Click="LyricsSettings_Click" Style="{StaticResource QuietButton}"
+                                AutomationProperties.Name="Lyrics options" ToolTip="Adjust timing, font size and lyrics source" />
+                        <TextBlock Text="Lyrics" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </DockPanel>
                     <ScrollViewer x:Name="LyricsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled" CanContentScroll="False"
                                   PreviewMouseDown="Lyrics_PreviewMouseDown"
@@ -112,7 +117,7 @@
                                                 <Setter Property="BorderBrush" Value="Transparent" />
                                                 <Setter Property="Padding" Value="14,14" />
                                                 <Setter Property="Margin" Value="0,2" />
-                                                <Setter Property="FontSize" Value="25" />
+                                                <Setter Property="FontSize" Value="{Binding DataContext.Lyrics.FontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                 <Setter Property="FontWeight" Value="SemiBold" />
                                                 <Setter Property="Cursor" Value="Hand" />
                                                 <Setter Property="Template">
@@ -125,6 +130,7 @@
                                                                                FontWeight="Normal" Margin="0,0,0,6" Foreground="{StaticResource MutedBrush}"
                                                                                Visibility="{Binding HasVocalLabel, Converter={StaticResource BoolVisibility}}" />
                                                                     <icons:KaraokeLine x:Name="VocalText" Row="{Binding}"
+                                                                           FontSize="{TemplateBinding FontSize}"
                                                                            Foreground="{TemplateBinding Foreground}"
                                                                            DimBrush="{StaticResource MutedBrush}"
                                                                            HighlightBrush="{StaticResource TextBrush}" />
@@ -151,7 +157,7 @@
                                                         <Setter Property="Margin" Value="28,2,0,2" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsBackground}" Value="True">
-                                                        <Setter Property="FontSize" Value="20" />
+                                                        <Setter Property="FontSize" Value="{Binding DataContext.Lyrics.BackgroundFontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                                         <Setter Property="Margin" Value="24,0,24,4" />
                                                         <Setter Property="Padding" Value="14,10" />
                                                     </DataTrigger>

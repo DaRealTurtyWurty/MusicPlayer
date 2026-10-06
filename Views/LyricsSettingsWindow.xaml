@@ -1,0 +1,49 @@
+<Window x:Class="MusicPlayer.Views.LyricsSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lyrics options" Width="440" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource PanelBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="13" UseLayoutRounding="True" PreviewKeyDown="Window_PreviewKeyDown">
+    <Grid Background="{StaticResource PanelBrush}">
+    <StackPanel Margin="24">
+        <TextBlock Text="Lyrics options" FontSize="20" FontWeight="SemiBold" />
+        <TextBlock Text="Changes appear immediately in Now Playing." Margin="0,8,0,24"
+                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+
+        <TextBlock Text="Timing" FontWeight="SemiBold" />
+        <TextBlock Text="Adjust this track in 0.1-second steps." Foreground="{StaticResource MutedBrush}" Margin="0,6,0,10" />
+        <StackPanel Orientation="Horizontal" IsEnabled="{Binding HasTimedLyrics}">
+            <Button x:Name="EarlierButton" Content="Earlier" Command="{Binding ShowEarlierCommand}" Margin="0,0,8,0"
+                    ToolTip="Show lyrics 0.1 seconds earlier" AutomationProperties.Name="Show lyrics 0.1 seconds earlier" />
+            <Button Content="Later" Command="{Binding ShowLaterCommand}" Margin="0,0,8,0"
+                    ToolTip="Show lyrics 0.1 seconds later" AutomationProperties.Name="Show lyrics 0.1 seconds later" />
+            <Button Content="Reset" Command="{Binding ResetTimingCommand}" ToolTip="Reset timing adjustment for this track" />
+        </StackPanel>
+        <TextBlock Text="{Binding TimingAdjustmentLabel}" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
+
+        <TextBlock Text="Font size" FontWeight="SemiBold" />
+        <DockPanel Margin="0,12,0,24">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding FontSize, StringFormat={}{0:0}}" Width="32"
+                       TextAlignment="Right" VerticalAlignment="Center" />
+            <Slider x:Name="LyricsFontSizeSlider" Minimum="16" Maximum="40" TickFrequency="1" IsSnapToTickEnabled="True"
+                    Value="{Binding FontSize, Mode=TwoWay}" VerticalAlignment="Center"
+                    AutomationProperties.Name="Lyrics font size" ToolTip="Adjust lyrics font size" />
+        </DockPanel>
+
+        <TextBlock Text="Lyrics source" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding SourceLabel}" ToolTip="{Binding SelectedLyricsFilePath}" TextTrimming="CharacterEllipsis"
+                   Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
+        <WrapPanel>
+            <Button x:Name="ChooseLyricsFileButton" Content="Choose file…" Command="{Binding ChooseFileCommand}" Margin="0,0,8,0"
+                    ToolTip="Choose an .lrc, .ttml or .lyricsfile.yaml file for this track" />
+            <Button Content="Automatic" Command="{Binding UseAutomaticSourceCommand}" Margin="0,0,8,0"
+                    ToolTip="Return to sidecar discovery and embedded lyrics" />
+            <Button Content="Reload" Command="{Binding ReloadCommand}" />
+        </WrapPanel>
+        <TextBlock Text="Timing and source selection apply to the current track. Font size is saved."
+                   Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,24" />
+        <Button Content="Close" Click="Close_Click" HorizontalAlignment="Right" />
+    </StackPanel>
+    </Grid>
+</Window>

@@ -36,6 +36,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
 {
     private readonly ILocalLyricsSource _source;
     private readonly IUiPreferencesStore? _preferences;
+    private readonly ILyricsFilePicker _filePicker;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private CancellationTokenSource? _loadCancellation;
     private Track? _track;
@@ -43,6 +44,27 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
     private LyricsDocument? _document;
     private double _position;
     private bool _disposed;
+
+    public const double MinimumFontSize = 16;
+    public const double MaximumFontSize = 40;
+    public const double MaximumTimingAdjustment = 30;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BackgroundFontSize))]
+    private double fontSize = 25;
+    public double BackgroundFontSize => FontSize * 0.8;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimingAdjustmentLabel))]
+    private double timingAdjustmentSeconds;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SourceLabel))]
+    [NotifyCanExecuteChangedFor(nameof(UseAutomaticSourceCommand))]
+    private string? selectedLyricsFilePath;
+
+    public string SourceLabel => SelectedLyricsFilePath is null ? "Automatic local lyrics" : System.IO.Path.GetFileName(SelectedLyricsFilePath);
+    public string TimingAdjustmentLabel => TimingAdjustmentSeconds == 0 ? "Timing: original"
+        : $"{Math.Abs(TimingAdjustmentSeconds):0.0} s {(TimingAdjustmentSeconds > 0 ? "earlier" : "later")}";
+    public bool HasTimedLyrics => Lines.Any(row => row.IsTimed);
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ToggleLabel))]
     private bool isEnabled;
@@ -61,11 +83,52 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
     public Task LoadingTask { get; private set; } = Task.CompletedTask;
     public event Action<double>? SeekRequested;
 
-    public LyricsViewModel(ILocalLyricsSource source, IUiPreferencesStore? preferences = null)
+    public LyricsViewModel(ILocalLyricsSource source, IUiPreferencesStore? preferences = null, ILyricsFilePicker? filePicker = null)
     {
         _source = source;
         _preferences = preferences;
+        _filePicker = filePicker ?? new LyricsFilePicker();
         isEnabled = preferences?.LoadLyricsEnabled() ?? true;
+        var savedFontSize = preferences?.LoadLyricsFontSize() ?? 25;
+        fontSize = double.IsFinite(savedFontSize) ? Math.Clamp(savedFontSize, MinimumFontSize, MaximumFontSize) : 25;
+    }
+
+    partial void OnFontSizeChanged(double value)
+    {
+        var normalized = double.IsFinite(value) ? Math.Clamp(value, MinimumFontSize, MaximumFontSize) : 25;
+        if (value != normalized) { FontSize = normalized; return; }
+        _preferences?.SaveLyricsFontSize(value);
+    }
+
+    partial void OnTimingAdjustmentSecondsChanged(double value)
+    {
+        var normalized = double.IsFinite(value) ? Math.Round(Math.Clamp(value, -MaximumTimingAdjustment, MaximumTimingAdjustment), 1) : 0;
+        if (value != normalized) { TimingAdjustmentSeconds = normalized; return; }
+        UpdatePosition(_position);
+    }
+
+    [RelayCommand] private void ShowEarlier() => TimingAdjustmentSeconds += 0.1;
+    [RelayCommand] private void ShowLater() => TimingAdjustmentSeconds -= 0.1;
+    [RelayCommand] private void ResetTiming() => TimingAdjustmentSeconds = 0;
+
+    private bool CanChooseFile() => !_disposed && IsEnabled && _track is not null;
+    [RelayCommand(CanExecute = nameof(CanChooseFile))]
+    private void ChooseFile()
+    {
+        var track = _track;
+        if (_filePicker.PickLyricsFile() is not { } path) return;
+        // Playback can advance while the modal picker is open.
+        if (_disposed || !IsEnabled || !ReferenceEquals(track, _track)) return;
+        SelectedLyricsFilePath = path;
+        StartLoad();
+    }
+
+    private bool CanUseAutomaticSource() => CanChooseFile() && SelectedLyricsFilePath is not null;
+    [RelayCommand(CanExecute = nameof(CanUseAutomaticSource))]
+    private void UseAutomaticSource()
+    {
+        SelectedLyricsFilePath = null;
+        StartLoad();
     }
 
     [RelayCommand]
@@ -79,6 +142,11 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
 
     public void SetTrack(Track? track, TimeSpan? duration)
     {
+        if (!string.Equals(_track?.FilePath, track?.FilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedLyricsFilePath = null;
+            TimingAdjustmentSeconds = 0;
+        }
         _track = track;
         _duration = duration > TimeSpan.Zero ? duration : null;
         _position = 0;
@@ -105,21 +173,23 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         StatusTitle = _track is null ? "Nothing playing" : "Lyrics are hidden";
         StatusDetail = _track is null ? "Play a track to see its local lyrics." : "Turn on lyrics to follow this track.";
         ReloadCommand.NotifyCanExecuteChanged();
+        ChooseFileCommand.NotifyCanExecuteChanged();
+        UseAutomaticSourceCommand.NotifyCanExecuteChanged();
         if (_disposed || !IsEnabled || _track is null) return;
 
         var cancellation = _loadCancellation = new CancellationTokenSource();
         IsLoading = true;
         StatusTitle = "Loading lyrics…";
         StatusDetail = "";
-        LoadingTask = LoadAsync(_track, _duration, cancellation.Token);
+        LoadingTask = LoadAsync(_track, _duration, SelectedLyricsFilePath, cancellation.Token);
     }
 
-    private async Task LoadAsync(Track track, TimeSpan? duration, CancellationToken cancellationToken)
+    private async Task LoadAsync(Track track, TimeSpan? duration, string? lyricsFilePath, CancellationToken cancellationToken)
     {
         LocalLyricsResult result;
         try
         {
-            result = await _source.LoadAsync(track.FilePath, duration, cancellationToken: cancellationToken).ConfigureAwait(false);
+            result = await _source.LoadAsync(track.FilePath, duration, lyricsFilePath, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
         catch (Exception ex)
@@ -160,7 +230,8 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
             }
             (StatusTitle, StatusDetail) = result.Status switch
             {
-                LocalLyricsStatus.NotFound => ("No local lyrics", "No embedded lyrics found. Place an .lrc, .ttml or .lyricsfile.yaml file with the same name beside this audio file."),
+                LocalLyricsStatus.NotFound when lyricsFilePath is not null => ("Lyrics file not found", "The selected file is no longer available. Choose another file or return to Automatic."),
+                LocalLyricsStatus.NotFound => ("No local lyrics", "Choose a lyrics file, or place an .lrc, .ttml or .lyricsfile.yaml file with the same name beside this audio file."),
                 LocalLyricsStatus.Invalid => ("No usable lyrics", result.Error ?? "This file does not contain valid timed lyrics."),
                 _ => ("Could not load lyrics", "The lyrics file could not be read. Check that it is accessible.")
             };
@@ -172,7 +243,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         _position = seconds;
         if (_document is null || !double.IsFinite(seconds)) return;
         // LRC offset advances display; source timestamps themselves are never modified.
-        var lyricSeconds = seconds + _document.Offset.TotalSeconds;
+        var lyricSeconds = seconds + _document.Offset.TotalSeconds + TimingAdjustmentSeconds;
         var active = new List<LyricLineViewModel>();
         foreach (var row in Lines)
         {
@@ -193,7 +264,7 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
     private void SeekToLine(LyricLineViewModel? row)
     {
         if (_disposed || !IsEnabled || _document is null || row is null || !row.IsTimed || !Lines.Contains(row)) return;
-        SeekRequested?.Invoke(Math.Clamp(row.Line.Start.TotalSeconds - _document.Offset.TotalSeconds,
+        SeekRequested?.Invoke(Math.Clamp(row.Line.Start.TotalSeconds - _document.Offset.TotalSeconds - TimingAdjustmentSeconds,
             0, _duration?.TotalSeconds ?? double.MaxValue));
     }
 
@@ -203,5 +274,10 @@ public sealed partial class LyricsViewModel : ObservableObject, IDisposable
         _loadCancellation?.Cancel();
         _loadCancellation?.Dispose();
         _loadCancellation = null;
+        ChooseFileCommand.NotifyCanExecuteChanged();
+        UseAutomaticSourceCommand.NotifyCanExecuteChanged();
+        ReloadCommand.NotifyCanExecuteChanged();
     }
+
+    partial void OnLinesChanged(IReadOnlyList<LyricLineViewModel> value) => OnPropertyChanged(nameof(HasTimedLyrics));
 }
