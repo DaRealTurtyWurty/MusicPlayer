@@ -155,6 +155,8 @@ internal static class PlaylistImportTests
         Check(!saving.IsImportingPlaylist && !saving.IsFinishingPlaylistImport && saving.SelectedPlaylist!.Tracks.Count == 3,
             "Modal closes and playlist opens after persistence finishes");
 
+        await CheckSaveFailuresAsync(directory, picker, importer, result.Tracks[0], second);
+
         var realFolder = Path.Combine(directory, "Silent audio");
         FixtureLibrary.Write(realFolder);
         File.WriteAllText(Path.Combine(realFolder, "Selected.m3u8"), "#EXTM3U\n02.wav\n01.wav\n");
@@ -162,6 +164,66 @@ internal static class PlaylistImportTests
         Check(realImport.Tracks.Select(t => t.Title).SequenceEqual(new[] { "Weightless", "A Walk" }) && realImport.Tracks.All(t => t.Duration > TimeSpan.Zero),
             "Import reads actual embedded music metadata");
         await PlaylistArtworkTests.RunAsync(realFolder);
+    }
+
+    private static async Task CheckSaveFailuresAsync(string directory, Picker picker, IPlaylistImportService importer,
+        Track originalTrack, string addedPath)
+    {
+        foreach (var action in new[] { "file", "folder", "add" })
+        {
+            var database = new SqliteMusicStore(Path.Combine(directory, $"failed-{action}.db"));
+            var original = new Playlist([originalTrack]) { Name = "Existing playlist" };
+            database.SavePlaylists([original]);
+            var store = new FailingStore(database);
+            using var vm = new MainViewModel(picker, picker, new Metadata(), new LibraryScanner(new Metadata()), new Player(),
+                playlistStore: store, playlistImportService: importer, libraryStore: database,
+                libraryRefreshService: new LibraryRefreshService(new Metadata()), monitorLibrary: false);
+            var target = vm.Playlists.Single();
+            vm.OpenPlaylistCommand.Execute(target);
+            vm.SelectedPlaylistTrackIndex = 0;
+            vm.SelectedPage = AppPage.NowPlaying;
+            vm.PlaylistMessage = "Previous success";
+            var originalTracks = target.Tracks.ToArray();
+            var libraryTracks = vm.Tracks.ToArray();
+            var changes = 0;
+            vm.Playlists.CollectionChanged += (_, _) => changes++;
+            target.Tracks.CollectionChanged += (_, _) => changes++;
+            picker.FilePath = Path.Combine(directory, "Evening.m3u8");
+            picker.AudioPaths = [addedPath];
+            var command = action switch
+            {
+                "file" => vm.ImportPlaylistFileCommand,
+                "folder" => vm.ImportPlaylistFolderCommand,
+                _ => vm.AddTracksToPlaylistCommand
+            };
+
+            await command.ExecuteAsync(null);
+            Check(vm.Playlists.Count == 1 && ReferenceEquals(vm.SelectedPlaylist, target) &&
+                  target.Tracks.SequenceEqual(originalTracks) && vm.Tracks.SequenceEqual(libraryTracks) && changes == 0,
+                $"Failed {action} save leaves playlist and library collections unchanged");
+            Check(database.LoadPlaylists().Single().Tracks.Count == 1 && database.LoadLibrary().Count == 1 &&
+                  vm.WatchedFolders.Count == 0 && database.LoadMusicFolders().Count == 0,
+                $"Failed {action} save preserves stored tracks and does not register a watched folder");
+            Check(vm.PlaylistError is not null && vm.PlaylistError.Contains("No playlist changes were applied") &&
+                  vm.PlaylistError.Contains("Retry") && vm.PlaylistMessage is null && vm.ToastMessage is null &&
+                  vm.SelectedPage == AppPage.NowPlaying && vm.IsPlaylistOpen && vm.SelectedPlaylistTrackIndex == 0,
+                $"Failed {action} save reports retry instructions without success feedback or navigation");
+            Check(!vm.IsImportingPlaylist && !vm.IsFinishingPlaylistImport && !vm.IsAddingPlaylistTracks &&
+                  command.CanExecute(null) && store.SaveAttempts == 1,
+                $"Failed {action} save closes progress and enables an explicit retry");
+
+            store.FailSave = false;
+            await command.ExecuteAsync(null);
+            var expectedTrackCount = action == "file" ? 3 : 2;
+            Check(vm.PlaylistError is null && vm.ToastMessage is not null && vm.SelectedPage == AppPage.Playlists &&
+                  vm.SelectedPlaylist!.Tracks.Count == expectedTrackCount && store.SaveAttempts == 2 &&
+                  database.LoadPlaylists().Single(p => p.Id == vm.SelectedPlaylist.Id).Tracks.Count == expectedTrackCount &&
+                  vm.Playlists.Count == (action == "add" ? 1 : 2),
+                $"Retrying {action} saves and applies the import once without duplicate playlists or tracks");
+            Check(vm.WatchedFolders.Count == (action == "folder" ? 1 : 0) &&
+                  database.LoadMusicFolders().Count == (action == "folder" ? 1 : 0),
+                $"Only a successful folder import registers its watched folder");
+        }
     }
 
     private static void Check(bool condition, string message)
@@ -226,5 +288,18 @@ internal static class PlaylistImportTests
             if (!Release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("Save was not released");
         }
         public void Dispose() { Entered.Dispose(); Release.Dispose(); }
+    }
+
+    private sealed class FailingStore(IPlaylistStore inner) : IPlaylistStore
+    {
+        public bool FailSave { get; set; } = true;
+        public int SaveAttempts { get; private set; }
+        public IReadOnlyList<Playlist> Load() => inner.Load();
+        public void Save(IEnumerable<Playlist> playlists)
+        {
+            SaveAttempts++;
+            if (FailSave) throw new IOException("Disk unavailable");
+            inner.Save(playlists);
+        }
     }
 }

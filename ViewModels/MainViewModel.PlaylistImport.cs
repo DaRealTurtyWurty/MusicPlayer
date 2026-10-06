@@ -77,12 +77,12 @@ public partial class MainViewModel
         var path = _folderPickerService.PickMusicFolder();
         if (path is not null)
         {
-            await ImportPlaylistAsync(progress => _playlistImportService.ImportFolderAsync(path, progress));
-            await RegisterMusicFolderAsync(path, discoverNewTracks: false);
+            if (await ImportPlaylistAsync(progress => _playlistImportService.ImportFolderAsync(path, progress)))
+                await RegisterMusicFolderAsync(path, discoverNewTracks: false);
         }
     }
 
-    private async Task ImportPlaylistAsync(Func<IProgress<PlaylistImportProgress>, Task<PlaylistImportResult>> import,
+    private async Task<bool> ImportPlaylistAsync(Func<IProgress<PlaylistImportProgress>, Task<PlaylistImportResult>> import,
         Playlist? target = null)
     {
         IsAddingPlaylistTracks = target is not null;
@@ -92,6 +92,7 @@ public partial class MainViewModel
         ImportProgress = new(0, null, 0, null);
         DismissToast();
         PlaylistError = null;
+        PlaylistMessage = null;
         try
         {
             var progress = new ImportProgressCallback(p =>
@@ -105,7 +106,7 @@ public partial class MainViewModel
                 ShowToast(result.SkippedCount == 0
                     ? "No supported audio files found."
                     : $"No tracks {(target is null ? "imported" : "added")}. {result.SkippedCount} missing, unsupported, or unreadable entries skipped.");
-                return;
+                return false;
             }
 
             IsFinishingPlaylistImport = true;
@@ -127,7 +128,12 @@ public partial class MainViewModel
             }
             catch (Exception ex)
             {
-                PlaylistError = $"Changes could not be saved: {ex.Message}";
+                System.Diagnostics.Trace.TraceError($"Playlist import save failed: {ex}");
+                // Commit to the live collections only after persistence succeeds. Retrying
+                // the import therefore cannot duplicate tracks from a failed attempt.
+                PlaylistError = $"Changes could not be saved: {ex.Message}. No playlist changes were applied. " +
+                    (target is null ? "Retry the import." : "Retry adding the tracks.");
+                return false;
             }
 
             if (target is null) Playlists.Add(playlist);
@@ -144,11 +150,13 @@ public partial class MainViewModel
                 : $"Added {result.Tracks.Count} {(result.Tracks.Count == 1 ? "track" : "tracks")} to {target.Name}.") + (result.SkippedCount > 0
                 ? $" Skipped {result.SkippedCount} missing, unsupported, or unreadable entries."
                 : ""));
+            return true;
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceError($"Playlist import failed: {ex}");
             PlaylistError = $"{(target is null ? "Could not import playlist" : "Could not add tracks")}: {ex.Message}";
+            return false;
         }
         finally
         {

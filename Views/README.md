@@ -12,8 +12,8 @@ Run `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --listening-his
 playback/counting, restart, write rollback, relinking, crossfade, and minimum-window layout checks.
 
 `MainWindow` owns the navigation, queue, and bottom player. Its content host switches between `LibraryView`,
-`PlaylistsView`, and `NowPlayingView`; playback stays in the shared `MainViewModel` so changing pages does not interrupt
-it.
+`PlaylistsView`, `NowPlayingView`, `MusicBrowserView` (Albums and Artists), `SettingsView`, and `HistoryView`.
+Playback stays in the shared `MainViewModel` so changing pages does not interrupt it.
 
 Now Playing displays local LRC/TTML/Lyricsfile lyrics with a persistent show/hide toggle,
 line and word/syllable highlighting, click-to-seek and automatic following. TTML
@@ -157,11 +157,19 @@ Add to queue appends, preserving duplicates and current playback. Add to playlis
 picker. Show album/artist opens the corresponding detail and clears browser filters. Open file location selects
 the audio file in Windows Explorer; missing files report an error and retain the Locate submenu for recovery.
 
-`MusicGroup` groups the existing artist/album tags case-insensitively, ignoring surrounding whitespace. Album titles
-are scoped to the tagged artist; missing tags appear under Unknown artist/Unknown album. Tracks sort by title, then
-path; artist playback groups those tracks by album. The current metadata model does not store album-artist or disc/
-track numbers, so compilation performers appear separately and ordering is alphabetical. Artwork uses the existing
-asynchronous cover loader, including artwork read from saved file paths. Library changes are coalesced on the UI
+`TagLibMetadataService` reads album artist, disc and track numbers, year, genre, and MusicBrainz release/release-group
+IDs into `Track`; SQLite preserves these tags across library, playlist, and playback-session saves. Older metadata
+versions are reread once by library refresh, even when the file size and timestamp are unchanged.
+
+`MusicGroup` scopes albums to album artist, falling back to track artist when album artist is blank. Names are matched
+case-insensitively after trimming surrounding whitespace; missing tags appear under Unknown artist/Unknown album.
+Within that artist scope, album identity uses a valid MusicBrainz release ID first, then a valid release-group ID,
+then album title and year. Artist galleries group those albums by album artist, so compilation performers with a
+shared album artist and album identity stay together. Without album-artist tags, performers remain separate.
+Album tracks sort by disc number, then track number, then title and file path. A missing disc number counts as disc
+one; unnumbered tracks follow numbered tracks within each disc. Artist playback visits albums in alphabetical title
+order and uses the same track sequence within each album. Artwork uses the existing asynchronous cover loader,
+including artwork read from saved file paths. Library changes are coalesced on the UI
 dispatcher, update open groups, and preserve track selection by path. Browsing never edits the queue or library.
 The new navigation values are appended to `AppPage` so older saved preferences retain their meaning.
 
@@ -180,8 +188,10 @@ library changes or is rescanned, including when another track joins the album or
 is never saved as a manual override. A release that stops matching returns to Unknown unless tags classify it.
 
 Open a release and use its type selector to set a manual classification, or select Automatic to remove it.
-Overrides are scoped to the normalized artist/album key, saved in SQLite, and take precedence over refreshed tags
-and the single-track inference rule. Explicit release-type tags take precedence over inference.
+Overrides are scoped to the album identity described above, saved in SQLite, and take precedence over refreshed tags
+and the single-track inference rule. Unambiguous overrides from older artist/album keys or previous album identities
+are carried forward during metadata backfill; conflicting old choices are not merged into an album-wide override.
+Explicit release-type tags take precedence over inference.
 The music files are never modified. The ReleaseTypes migration adds the metadata column and override table and
 invalidates old file timestamps once so the usual background library refresh can read tags for existing imports.
 Run `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --release-type-smoke` for classification, filtering,
@@ -190,6 +200,8 @@ override persistence/failures, embedded-tag extraction, upgrade/backfill, file p
 Run `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --music-browser-smoke` for grouping, search, playback,
 live-update, navigation, and layout checks. Gallery and detail previews are saved in the test output's screenshots
 folder, including the artist track view at minimum width with the queue open.
+Run `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --track-metadata-smoke` for tag extraction, persistence,
+upgrade/backfill, compilation grouping, disc/track ordering, album identity, and release-type override migration checks.
 
 The playlist view starts with a cover gallery. `OpenPlaylistCommand` opens the selected playlist's detail page;
 `ClosePlaylistCommand` returns to the gallery without changing playback. `PlaylistCover` searches songs on a background
@@ -203,10 +215,15 @@ playlist entries in order, including duplicates, resolves relative paths beside 
 paths and file URIs. Folder imports include subfolders in filename order. Missing, unsupported, and unreadable entries
 are counted in the result; remote URLs are skipped and HLS manifests are rejected. Imports run off the UI thread and
 leave playback and the queue intact.
+The playlist detail also supports adding selected audio files in picker order. New playlists and appended tracks are
+saved before updating the live playlist and library collections. A failed playlist save leaves those collections and
+the current view unchanged, reports retry instructions, and shows no success toast. Retrying the action applies the
+import once. A folder is registered for watching only after its playlist import succeeds.
 
 Import progress is reported during file discovery and track reading, at most every 100 ms plus stage transitions and
 completion. The shared window shows discovery activity, then a determinate progress bar with the processed count, total,
-current file, and skipped count. Progress remains visible when switching pages and disappears on completion or failure.
+current file, and skipped count. Progress remains visible when switching pages; at 100 percent, the modal stays open
+with a saving label until persistence finishes. It closes on completion or failure.
 
 
 Library and playlist organization supports Ctrl/Shift multiselection. The Library toolbar plays, queues, or adds
@@ -216,7 +233,8 @@ remain independently selectable. Rename uses the existing name editor, with Ente
 a failed save keeps the editor open. Export M3U8 writes UTF-8 extended playlists with relative paths, preserving
 order and duplicates. Export references the original music files rather than copying them.
 
-Library sorting supports artist, title, album, year, duration, and file path, with a saved descending toggle.
+Library sorting supports artist, title, album, year, duration, file path, and play count, with a saved descending toggle.
+Artist sorting groups by album, then disc and track number; album sorting also uses disc and track number as tie-breakers.
 Search requires all words to match; quoted phrases and title:, artist:, album:, albumartist:, genre:, year:, path:,
 and missing: prefixes narrow individual terms. For example: `artist:"Miles Davis" genre:jazz`.
 
