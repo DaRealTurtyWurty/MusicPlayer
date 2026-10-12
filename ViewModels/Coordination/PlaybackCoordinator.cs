@@ -21,6 +21,7 @@ internal interface IPlaybackState
     ObservableCollection<Track> Queue { get; }
     LyricsViewModel Lyrics { get; }
     void RememberTrack(Track? track, bool recycled = false);
+    void AddRecycledTrack(Track track);
     void Next();
     void RefreshLyricsPosition();
     void SetPositionFromOutput(double seconds);
@@ -224,15 +225,15 @@ internal sealed class PlaybackCoordinator : IDisposable
         _committingGapless = true;
         try
         {
+            _state.CurrentTrack = next;
             if (_state.RepeatMode != PlaybackRepeatMode.One)
             {
                 var recycled = _state.RepeatMode == PlaybackRepeatMode.All && previous is not null;
                 var hadUpcoming = _state.Queue.Count > 0;
                 if (hadUpcoming) _state.Queue.RemoveAt(0);
-                if (recycled && hadUpcoming) _state.Queue.Add(previous!);
+                if (recycled && hadUpcoming) _state.AddRecycledTrack(previous!);
                 _state.RememberTrack(previous, recycled);
             }
-            _state.CurrentTrack = next;
             _listenRecorded = false;
             _state.Lyrics.SetTrack(next, _audioPlayer.Duration);
             _state.ReloadCurrentTrack = false;

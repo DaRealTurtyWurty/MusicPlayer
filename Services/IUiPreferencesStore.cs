@@ -22,6 +22,10 @@ public interface IUiPreferencesStore
     void SaveVolume(double volume, double volumeBeforeMute);
     (bool ShuffleEnabled, PlaybackRepeatMode RepeatMode) LoadPlaybackModes();
     void SavePlaybackModes(bool shuffleEnabled, PlaybackRepeatMode repeatMode);
+    PlaybackShuffleMode LoadShuffleMode() => LoadPlaybackModes().ShuffleEnabled ? PlaybackShuffleMode.Tracks : PlaybackShuffleMode.Off;
+    void SaveShuffleMode(PlaybackShuffleMode mode, PlaybackRepeatMode repeatMode) => SavePlaybackModes(mode != PlaybackShuffleMode.Off, repeatMode);
+    ShuffleRules LoadShuffleRules() => new();
+    void SaveShuffleRules(ShuffleRules rules) { }
     bool LoadLyricsEnabled();
     void SaveLyricsEnabled(bool enabled);
     double LoadLyricsFontSize() => 25;

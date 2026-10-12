@@ -248,3 +248,8 @@ Settings follows Now Playing in the navigation and contains audio output selecti
 and library scanning controls. The volume popup provides mute and volume adjustment. Discord options are applied
 with Save Discord settings; invalid application IDs keep sharing disabled. Audio output changes apply immediately.
 Run the focused UI checks with `dotnet run --project Tests/MusicPlayer.QueueTests.csproj -- --settings-smoke`.
+
+Shuffle settings offer Off, Tracks, Albums, Artists, and Reshuffle each loop. Albums preserve disc/track order;
+Artists preserve the relative order within each artist. Reshuffle each loop rebuilds the next pass with Repeat All,
+while Tracks repeats its visible order. Artist/album repetition rules guide shuffle boundaries wherever possible,
+without breaking groups or dropping songs. Settings save immediately and startup preserves the saved queue order.

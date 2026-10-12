@@ -7,6 +7,7 @@ public partial class MainViewModel
 {
     bool IPlaybackState.ReloadCurrentTrack { get => _reloadCurrentTrack; set => _reloadCurrentTrack = value; }
     void IPlaybackState.RememberTrack(Track? track, bool recycled) => RememberTrack(track, recycled);
+    void IPlaybackState.AddRecycledTrack(Track track) => _queue.AddRecycledTrack(track);
     void IPlaybackState.Next() => Next();
     void IPlaybackState.SetPositionFromOutput(double seconds) => SetPositionFromOutput(seconds);
 

@@ -23,6 +23,31 @@
    </StackPanel>
    <TextBlock Text="Fade out the ending song while fading in the next queued song. Overrides gapless playback while enabled. Short songs use a shorter fade. Settings are saved automatically; changes apply during playback."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
+   <TextBlock Text="Shuffle" FontSize="18" Margin="0,0,0,12" />
+   <Label Content="Shuffle mode" Target="{Binding ElementName=ShuffleModeSelector}" Padding="0,0,0,6" />
+   <ComboBox x:Name="ShuffleModeSelector" ItemsSource="{Binding ShuffleModes}" SelectedItem="{Binding ShuffleMode, Mode=TwoWay}"
+             Width="240" HorizontalAlignment="Left" AutomationProperties.Name="Shuffle mode">
+    <ComboBox.ItemTemplate>
+     <DataTemplate>
+      <TextBlock>
+       <TextBlock.Style>
+        <Style TargetType="TextBlock">
+         <Setter Property="Text" Value="{Binding}" />
+         <Style.Triggers>
+          <DataTrigger Binding="{Binding}" Value="ReshuffleEachLoop"><Setter Property="Text" Value="Reshuffle each loop" /></DataTrigger>
+         </Style.Triggers>
+        </Style>
+       </TextBlock.Style>
+      </TextBlock>
+     </DataTemplate>
+    </ComboBox.ItemTemplate>
+   </ComboBox>
+   <TextBlock Text="Tracks mixes songs. Albums keeps each album in disc/track order. Artists keeps each artist together. Reshuffle each loop mixes the next pass when Repeat All is enabled. Turning shuffle off keeps the visible queue order."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
+   <CheckBox Content="Avoid consecutive songs by the same artist" IsChecked="{Binding AvoidConsecutiveArtists, Mode=TwoWay}" />
+   <CheckBox Content="Avoid consecutive songs from the same album" IsChecked="{Binding AvoidConsecutiveAlbums, Mode=TwoWay}" Margin="0,8,0,0" />
+   <TextBlock Text="Rules apply when shuffling, wherever possible. Album and artist groups stay together; rules guide their boundaries. Manually queued songs keep their priority. Settings are saved automatically."
+              TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
    <TextBlock Text="ReplayGain" FontSize="18" Margin="0,0,0,12" />
    <CheckBox x:Name="ReplayGainEnabledCheckBox" Content="Normalize volume with ReplayGain"
              IsChecked="{Binding IsReplayGainEnabled, Mode=TwoWay}" AutomationProperties.Name="Enable ReplayGain" />

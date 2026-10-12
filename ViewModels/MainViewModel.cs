@@ -29,8 +29,16 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
     [NotifyCanExecuteChangedFor(nameof(PreviousCommand))]
     private Track? currentTrack;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShuffleLabel))]
-    private bool isShuffleEnabled;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShuffleLabel))]
+    [NotifyPropertyChangedFor(nameof(IsShuffleEnabled))]
+    private PlaybackShuffleMode shuffleMode;
+
+    public bool IsShuffleEnabled
+    {
+        get => ShuffleMode != PlaybackShuffleMode.Off;
+        set => ShuffleMode = value ? (IsShuffleEnabled ? ShuffleMode : PlaybackShuffleMode.Tracks) : PlaybackShuffleMode.Off;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRepeatEnabled))]
@@ -41,9 +49,7 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
 
     public bool IsRepeatEnabled => RepeatMode != PlaybackRepeatMode.Off;
 
-    public string ShuffleLabel => IsShuffleEnabled
-        ? "Shuffle on — turn off to keep the current queue order"
-        : "Shuffle off — turn on to mix upcoming tracks";
+    public string ShuffleLabel => $"{(ShuffleMode == PlaybackShuffleMode.ReshuffleEachLoop ? "Reshuffle each loop" : $"Shuffle {ShuffleMode.ToString().ToLowerInvariant()}")} ? click to cycle modes; right-click to choose";
 
     public string RepeatLabel => RepeatMode switch
     {
@@ -177,7 +183,11 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
         isQueueOpen = _uiPreferencesStore?.LoadQueueOpen() ?? false;
         selectedPage = _uiPreferencesStore?.LoadSelectedPage() ?? AppPage.Library;
         // Restore the flags directly: enabling shuffle via its setter would reshuffle a saved session.
-        (isShuffleEnabled, repeatMode) = _uiPreferencesStore?.LoadPlaybackModes() ?? (false, PlaybackRepeatMode.Off);
+        repeatMode = _uiPreferencesStore?.LoadPlaybackModes().RepeatMode ?? PlaybackRepeatMode.Off;
+        shuffleMode = _uiPreferencesStore?.LoadShuffleMode() ?? PlaybackShuffleMode.Off;
+        var shuffleRules = _uiPreferencesStore?.LoadShuffleRules() ?? new();
+        avoidConsecutiveArtists = shuffleRules.AvoidConsecutiveArtists;
+        avoidConsecutiveAlbums = shuffleRules.AvoidConsecutiveAlbums;
         _playlistImportService = playlistImportService ?? new PlaylistImportService(metadataService);
 
         _positionTimer = new DispatcherTimer
@@ -254,16 +264,31 @@ public partial class MainViewModel : ObservableObject, IDisposable, IPlaybackSta
     [RelayCommand]
     private void ToggleShuffle() => IsShuffleEnabled = !IsShuffleEnabled;
 
-    partial void OnIsShuffleEnabledChanged(bool value)
+    [RelayCommand]
+    private void CycleShuffle() => ShuffleMode = ShuffleMode switch
     {
-        if (value)
-            ShuffleQueue();
-        _uiPreferencesStore?.SavePlaybackModes(value, RepeatMode);
+        PlaybackShuffleMode.Off => PlaybackShuffleMode.Tracks,
+        PlaybackShuffleMode.Tracks => PlaybackShuffleMode.Albums,
+        PlaybackShuffleMode.Albums => PlaybackShuffleMode.Artists,
+        PlaybackShuffleMode.Artists => PlaybackShuffleMode.ReshuffleEachLoop,
+        _ => PlaybackShuffleMode.Off
+    };
+
+    [RelayCommand]
+    private void SetShuffleMode(PlaybackShuffleMode mode)
+    {
+        if (Enum.IsDefined(mode)) ShuffleMode = mode;
+    }
+
+    partial void OnShuffleModeChanged(PlaybackShuffleMode value)
+    {
+        if (value != PlaybackShuffleMode.Off) ShuffleQueue();
+        _uiPreferencesStore?.SaveShuffleMode(value, RepeatMode);
     }
 
     partial void OnRepeatModeChanged(PlaybackRepeatMode value)
     {
-        _uiPreferencesStore?.SavePlaybackModes(IsShuffleEnabled, value);
+        _uiPreferencesStore?.SaveShuffleMode(ShuffleMode, value);
         PrepareGaplessTrack();
     }
 

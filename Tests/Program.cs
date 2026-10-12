@@ -90,6 +90,20 @@ internal static partial class Program
             DispatcherTest.Run(CheckTrackMetadataAsync);
             return;
         }
+        if (args is ["--shuffle-smoke"])
+        {
+            var shuffleApp = new App(suppressStartup: true);
+            shuffleApp.InitializeComponent();
+            shuffleApp.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+            CheckShuffleAndRepeat();
+            CheckPlaybackModePersistence();
+            CheckShuffleModes();
+            DispatcherTest.Run(CheckShuffleAudioLoopsAsync);
+            CheckPrevious();
+            DispatcherTest.Run(CheckGaplessAsync);
+            DispatcherTest.Run(CheckCrossfadeAsync);
+            return;
+        }
         if (args is ["--queue-smoke"])
         {
             var queueApp = new App(suppressStartup: true);

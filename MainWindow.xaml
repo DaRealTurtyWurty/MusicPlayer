@@ -238,9 +238,23 @@
                     <Grid Grid.Column="1" x:Name="PlaybackCenter">
                         <StackPanel x:Name="TransportControls" Orientation="Horizontal" HorizontalAlignment="Center"
                                     VerticalAlignment="Center">
-                            <Button x:Name="ShuffleButton" Command="{Binding ToggleShuffleCommand}"
+                            <Button x:Name="ShuffleButton" Command="{Binding CycleShuffleCommand}"
                                     ToolTip="{Binding ShuffleLabel}" AutomationProperties.Name="{Binding ShuffleLabel}"
                                     Margin="0,0,8,0">
+                                <Button.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Shuffle off" Command="{Binding SetShuffleModeCommand}"
+                                                  CommandParameter="{x:Static models:PlaybackShuffleMode.Off}" />
+                                        <MenuItem Header="Shuffle tracks" Command="{Binding SetShuffleModeCommand}"
+                                                  CommandParameter="{x:Static models:PlaybackShuffleMode.Tracks}" />
+                                        <MenuItem Header="Shuffle albums" Command="{Binding SetShuffleModeCommand}"
+                                                  CommandParameter="{x:Static models:PlaybackShuffleMode.Albums}" />
+                                        <MenuItem Header="Reshuffle each loop" Command="{Binding SetShuffleModeCommand}"
+                                                  CommandParameter="{x:Static models:PlaybackShuffleMode.ReshuffleEachLoop}" />
+                                        <MenuItem Header="Shuffle artists" Command="{Binding SetShuffleModeCommand}"
+                                                  CommandParameter="{x:Static models:PlaybackShuffleMode.Artists}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                                         <Style.Triggers>

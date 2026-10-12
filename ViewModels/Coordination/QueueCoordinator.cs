@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using MusicPlayer.Models;
 
 namespace MusicPlayer.ViewModels.Coordination;
@@ -8,6 +9,9 @@ internal interface IQueuePlaybackState
     Track? CurrentTrack { get; }
     PlaybackRepeatMode RepeatMode { get; }
     bool IsShuffleEnabled { get; }
+    PlaybackShuffleMode ShuffleMode { get; }
+    bool AvoidConsecutiveArtists { get; }
+    bool AvoidConsecutiveAlbums { get; }
     int SelectedQueueIndex { get; set; }
     string? PlaybackError { get; set; }
     double PositionSeconds { get; set; }
@@ -20,10 +24,49 @@ internal interface IQueuePlaybackState
 }
 
 // Queue entries are occurrences: duplicate tracks retain independent selection and history.
-internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
+internal sealed class QueueCoordinator
 {
-    private readonly IQueuePlaybackState _state = state;
-    private readonly Random _random = random;
+    private readonly IQueuePlaybackState _state;
+    private readonly Random _random;
+    private readonly List<bool> _pendingCycle = [];
+    private bool _addingRecycled;
+    private bool _currentPendingNextCycle;
+
+    public QueueCoordinator(IQueuePlaybackState state, Random random)
+    {
+        _state = state;
+        _random = random;
+        Queue.CollectionChanged += TrackCycleChanges;
+    }
+
+    private void TrackCycleChanges(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                _pendingCycle.Insert(e.NewStartingIndex, !_addingRecycled || _currentPendingNextCycle);
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                _pendingCycle.RemoveAt(e.OldStartingIndex);
+                break;
+            case NotifyCollectionChangedAction.Move:
+                var pending = _pendingCycle[e.OldStartingIndex];
+                _pendingCycle.RemoveAt(e.OldStartingIndex);
+                _pendingCycle.Insert(e.NewStartingIndex, pending);
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                _pendingCycle.Clear();
+                _currentPendingNextCycle = false;
+                break;
+        }
+    }
+
+    public void AddRecycledTrack(Track track)
+    {
+        _addingRecycled = true;
+        try { Queue.Add(track); }
+        finally { _addingRecycled = false; _currentPendingNextCycle = false; }
+    }
     private readonly Stack<(Track Track, bool Recycled)> _history = new();
     public ObservableCollection<Track> Queue { get; } = [];
     public IEnumerable<(Track Track, bool Recycled)> History => _history;
@@ -47,20 +90,68 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
         foreach (var entry in entries) _history.Push(entry);
     }
 
-    public void ShuffleQueue()
+    public void ShuffleQueue(bool newSession = false)
     {
-        // Track indices, rather than track identity, preserve selection for duplicate songs.
-        var selectedIndex = _state.SelectedQueueIndex;
-        for (var i = Queue.Count - 1; i > 0; i--)
+        if (_state.ShuffleMode == PlaybackShuffleMode.Off) return;
+        // Original indices identify occurrences even when the same song is queued twice.
+        var entries = Queue.Select((track, index) => (Track: track, Index: index)).ToArray();
+        var groups = _state.ShuffleMode switch
+        {
+            PlaybackShuffleMode.Albums => entries.GroupBy(e => MusicGroup.AlbumKey(e.Track))
+                .Select(g => g.OrderBy(e => e.Track.DiscNumber == 0 ? 1u : e.Track.DiscNumber)
+                    .ThenBy(e => e.Track.TrackNumber == 0 ? ulong.MaxValue : e.Track.TrackNumber)
+                    .ToArray()).ToArray(),
+            PlaybackShuffleMode.Artists => entries.GroupBy(e => MusicGroup.Normalize(MusicGroup.ArtistName(e.Track)))
+                .Select(g => g.ToArray()).ToArray(),
+            _ => entries.Select(e => new[] { e }).ToArray()
+        };
+        for (var i = groups.Length - 1; i > 0; i--)
         {
             var j = _random.Next(i + 1);
-            if (i == j) continue;
-            (Queue[i], Queue[j]) = (Queue[j], Queue[i]);
-            if (selectedIndex == i) selectedIndex = j;
-            else if (selectedIndex == j) selectedIndex = i;
+            (groups[i], groups[j]) = (groups[j], groups[i]);
         }
-
-        _state.SelectedQueueIndex = selectedIndex;
+        if (_state.AvoidConsecutiveArtists || _state.AvoidConsecutiveAlbums)
+        {
+            var remaining = groups.ToList();
+            var arranged = new List<(Track Track, int Index)[]>();
+            string ArtistKey(Track track) => MusicGroup.Normalize(MusicGroup.ArtistName(track));
+            var artistCounts = remaining.GroupBy(g => ArtistKey(g[0].Track)).ToDictionary(g => g.Key, g => g.Count());
+            var albumCounts = remaining.GroupBy(g => MusicGroup.AlbumKey(g[0].Track)).ToDictionary(g => g.Key, g => g.Count());
+            var previous = newSession ? null : _state.CurrentTrack;
+            while (remaining.Count > 0)
+            {
+                int Conflicts(Track next) => previous is null ? 0 :
+                    (_state.AvoidConsecutiveArtists && MusicGroup.Normalize(MusicGroup.ArtistName(previous)) == MusicGroup.Normalize(MusicGroup.ArtistName(next)) ? 1 : 0) +
+                    (_state.AvoidConsecutiveAlbums && MusicGroup.AlbumKey(previous) == MusicGroup.AlbumKey(next) ? 1 : 0);
+                // Prefer the most represented remaining category to avoid stranding repeats at the end.
+                int Pressure(Track next) =>
+                    (_state.AvoidConsecutiveArtists ? artistCounts[ArtistKey(next)] : 0) +
+                    (_state.AvoidConsecutiveAlbums ? albumCounts[MusicGroup.AlbumKey(next)] : 0);
+                var chosen = remaining.OrderBy(g => Conflicts(g[0].Track)).ThenByDescending(g => Pressure(g[0].Track)).First();
+                arranged.Add(chosen);
+                remaining.Remove(chosen);
+                artistCounts[ArtistKey(chosen[0].Track)]--;
+                albumCounts[MusicGroup.AlbumKey(chosen[0].Track)]--;
+                previous = chosen[^1].Track;
+            }
+            groups = arranged.ToArray();
+        }
+        var selectedIndex = _state.SelectedQueueIndex;
+        // Move entries so timeline rows and their occurrence identity survive the shuffle.
+        var indices = entries.Select(e => e.Index).ToList();
+        var order = groups.SelectMany(g => g).ToArray();
+        for (var i = 0; i < order.Length; i++)
+        {
+            var source = indices.IndexOf(order[i].Index, i);
+            if (source == i) continue;
+            Queue.Move(source, i);
+            indices.RemoveAt(source);
+            indices.Insert(i, order[i].Index);
+        }
+        for (var i = 0; i < _pendingCycle.Count; i++) _pendingCycle[i] = true;
+        _currentPendingNextCycle = false;
+        _state.SelectedQueueIndex = selectedIndex >= 0 && selectedIndex < entries.Length
+            ? Array.FindIndex(order, e => e.Index == selectedIndex) : -1;
     }
 
     public void StartPlaybackSession(IEnumerable<Track> tracks)
@@ -72,7 +163,7 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
         foreach (var track in sessionTracks)
             Queue.Add(track);
         if (_state.IsShuffleEnabled)
-            ShuffleQueue();
+            ShuffleQueue(newSession: true);
         // A new library session must not recycle the previously playing track.
         AdvanceQueue(recycleCurrent: false);
     }
@@ -93,9 +184,14 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
             _state.HistoryChanged();
             // Repeat-all places the played entry at the tail. Pull it back out when
             // navigating backwards, so going forward does not grow the repeat cycle.
-            if (previous.Recycled && Queue.Count > 0 &&
-                string.Equals(Queue[^1].FilePath, previous.Track.FilePath, StringComparison.OrdinalIgnoreCase))
-                Queue.RemoveAt(Queue.Count - 1);
+            if (previous.Recycled && Queue.Count > 0)
+            {
+                var index = _state.ShuffleMode == PlaybackShuffleMode.ReshuffleEachLoop
+                    ? Enumerable.Range(0, Queue.Count).Reverse().FirstOrDefault(i =>
+                        string.Equals(Queue[i].FilePath, previous.Track.FilePath, StringComparison.OrdinalIgnoreCase), -1)
+                    : string.Equals(Queue[^1].FilePath, previous.Track.FilePath, StringComparison.OrdinalIgnoreCase) ? Queue.Count - 1 : -1;
+                if (index >= 0) Queue.RemoveAt(index);
+            }
             if (!_state.LoadTrack(previous.Track, playImmediately: true, rememberCurrent: false))
                 continue;
             if (interruptedTrack is not null)
@@ -114,6 +210,16 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
         if (track is null) return;
         _history.Push((track, recycled));
         _state.HistoryChanged();
+        if (recycled && _state.ShuffleMode == PlaybackShuffleMode.ReshuffleEachLoop &&
+            Queue.Count > 0 && !_pendingCycle.Any(p => p))
+        {
+            var oldOrder = Queue.ToArray();
+            ShuffleQueue();
+            // With two or more distinct upcoming songs, ensure the next pass changes.
+            if (Queue.Count > 1 && Queue.SequenceEqual(oldOrder) && !_state.AvoidConsecutiveArtists && !_state.AvoidConsecutiveAlbums)
+                Queue.Move(0, Queue.Count - 1);
+            _currentPendingNextCycle = true;
+        }
     }
 
     public void AdvanceQueue(bool recycleCurrent)
@@ -121,7 +227,7 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
         var previous = _state.CurrentTrack;
         var recycled = recycleCurrent && _state.RepeatMode == PlaybackRepeatMode.All && previous is not null;
         if (recycled)
-            Queue.Add(previous!);
+            AddRecycledTrack(previous!);
 
         // Unreadable tracks should not prevent the rest of the queue from playing.
         // Recycle only once per advance so a queue of failed files cannot loop forever.
@@ -152,7 +258,7 @@ internal sealed class QueueCoordinator(IQueuePlaybackState state, Random random)
         var previous = _state.CurrentTrack;
         var recycled = _state.RepeatMode == PlaybackRepeatMode.All && previous is not null;
         if (recycled)
-            Queue.Add(previous!);
+            AddRecycledTrack(previous!);
         var loaded = _state.LoadTrack(track, playImmediately: true, rememberCurrent: false);
         RememberTrack(previous, recycled);
         if (!loaded)

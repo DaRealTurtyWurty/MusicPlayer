@@ -63,13 +63,30 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
     public (bool ShuffleEnabled, PlaybackRepeatMode RepeatMode) LoadPlaybackModes()
     {
         var preferences = Load();
-        return (preferences.IsShuffleEnabled, Enum.IsDefined(preferences.RepeatMode)
+        return (GetShuffleMode(preferences) != PlaybackShuffleMode.Off, Enum.IsDefined(preferences.RepeatMode)
             ? preferences.RepeatMode : PlaybackRepeatMode.Off);
     }
 
     public void SavePlaybackModes(bool shuffleEnabled, PlaybackRepeatMode repeatMode) => Save(Load() with
     {
+        ShuffleMode = shuffleEnabled ? PlaybackShuffleMode.Tracks : PlaybackShuffleMode.Off,
         IsShuffleEnabled = shuffleEnabled,
+        RepeatMode = Enum.IsDefined(repeatMode) ? repeatMode : PlaybackRepeatMode.Off
+    });
+
+    public ShuffleRules LoadShuffleRules() => Load().ShuffleRules ?? new();
+    public void SaveShuffleRules(ShuffleRules rules) => Save(Load() with { ShuffleRules = rules });
+
+    public PlaybackShuffleMode LoadShuffleMode() => GetShuffleMode(Load());
+
+    private static PlaybackShuffleMode GetShuffleMode(Preferences preferences) => preferences.ShuffleMode is { } mode
+        ? (Enum.IsDefined(mode) ? mode : PlaybackShuffleMode.Off)
+        : preferences.IsShuffleEnabled ? PlaybackShuffleMode.Tracks : PlaybackShuffleMode.Off;
+
+    public void SaveShuffleMode(PlaybackShuffleMode mode, PlaybackRepeatMode repeatMode) => Save(Load() with
+    {
+        ShuffleMode = Enum.IsDefined(mode) ? mode : PlaybackShuffleMode.Off,
+        IsShuffleEnabled = Enum.IsDefined(mode) && mode != PlaybackShuffleMode.Off,
         RepeatMode = Enum.IsDefined(repeatMode) ? repeatMode : PlaybackRepeatMode.Off
     });
 
@@ -117,5 +134,5 @@ public sealed class JsonUiPreferencesStore(string? path = null) : IUiPreferences
         bool IsShuffleEnabled = false, PlaybackRepeatMode RepeatMode = PlaybackRepeatMode.Off,
         bool LyricsEnabled = true, DiscordPresenceOptions? DiscordPresence = null, string? OutputDeviceId = null, LibraryWorkflowPreferences? LibraryWorkflow = null,
         bool GaplessPlaybackEnabled = true, ReplayGainOptions? ReplayGain = null, CrossfadeOptions? Crossfade = null,
-        double LyricsFontSize = 25);
+        double LyricsFontSize = 25, PlaybackShuffleMode? ShuffleMode = null, ShuffleRules? ShuffleRules = null);
 }
