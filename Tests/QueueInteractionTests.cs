@@ -164,7 +164,7 @@ internal static partial class Program
             "History offers replay while its removal and reorder actions remain disabled");
         items = OpenMenu(3);
         items[0].Command.Execute(null);
-        Check(vm.CurrentTrack == b && vm.Queue.SequenceEqual(new[] { a, c }), "Context-menu Play starts its selected queue occurrence");
+        Check(vm.CurrentTrack == b && vm.Queue.SequenceEqual(new[] { c }) && vm.QueueTimeline.Where(e => e.IsHistory).Last().Track == a, "Context-menu Play jumps to its selected queue occurrence");
         panel.DataContext = null;
     }
 }

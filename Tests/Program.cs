@@ -112,6 +112,8 @@ internal static partial class Program
             CheckQueueHistory();
             CheckClearQueueConfirmation();
             CheckQueueInteractions();
+            CheckQueuePositionJumps();
+            DispatcherTest.Run(CheckQueueJumpAudioAsync);
             CheckQueuePlaybackScrolling();
             return;
         }
@@ -337,11 +339,11 @@ internal static partial class Program
         Check(vm.Queue.SequenceEqual(new[] { b, c }) && vm.SelectedQueueIndex == 1, "Move down");
         Check(!vm.MoveQueueDownCommand.CanExecute(null), "Lower reorder boundary");
         vm.PlayQueuedTrackCommand.Execute(null);
-        Check(vm.CurrentTrack == c && vm.Queue.Single() == b, "Play selected queue entry");
+        Check(vm.CurrentTrack == c && vm.IsQueueEmpty, "Play selected queue entry jumps past preceding songs");
         vm.PauseCommand.Execute(null);
-        Check(vm.Queue.Count == 1, "Pause preserves queue");
+        Check(vm.Queue.Count == 0, "Pause preserves queue");
         vm.StopCommand.Execute(null);
-        Check(vm.Queue.Count == 1 && vm.PositionSeconds == 0, "Stop preserves queue");
+        Check(vm.Queue.Count == 0 && vm.PositionSeconds == 0, "Stop preserves queue");
         vm.ClearQueueCommand.Execute(null);
         vm.ConfirmClearQueueCommand.Execute(null);
         Check(vm.CurrentTrack == c && vm.IsQueueEmpty, "Clear preserves current song");
@@ -397,6 +399,7 @@ internal static partial class Program
         CheckClearQueueConfirmation();
         CheckDeletePlaylistConfirmation();
         CheckQueueInteractions();
+        CheckQueuePositionJumps();
         CheckQueuePlaybackScrolling();
         CheckTrackMenus();
         CheckTrackActions();

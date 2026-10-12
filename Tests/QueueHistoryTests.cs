@@ -38,15 +38,15 @@ internal static partial class Program
         Check(!vm.RemoveFromQueueCommand.CanExecute(null) && !vm.MoveQueueDownCommand.CanExecute(null) &&
               vm.PlayQueueEntryCommand.CanExecute(null), "History can be replayed but is excluded from upcoming edits");
         vm.PlayQueueEntryCommand.Execute(null);
-        Check(vm.CurrentTrack == a && vm.QueueTimeline.Where(e => e.IsHistory).Select(e => e.Track).SequenceEqual(new[] { a, b }),
-            "Replaying history retains the prior playback sequence");
+        Check(vm.CurrentTrack == a && vm.QueueTimeline.Where(e => e.IsHistory).Select(e => e.Track).SequenceEqual(Array.Empty<Track>()) && vm.Queue.SequenceEqual(new[] { b, c }),
+            "Jumping to history restores the following songs in order");
         vm.RepeatMode = PlaybackRepeatMode.One;
         player.End();
-        Check(vm.QueueTimeline.Count(e => e.IsHistory) == 2 && vm.QueueTimeline.Count(e => e.IsCurrent) == 1,
+        Check(vm.QueueTimeline.Count(e => e.IsHistory) == 0 && vm.QueueTimeline.Count(e => e.IsCurrent) == 1,
             "Repeat one retains a single current occurrence without adding history");
-        vm.PreviousCommand.Execute(null);
-        Check(vm.CurrentTrack == b && vm.QueueTimeline.Select(e => e.Track).SequenceEqual(new[] { a, b, a, c }),
-            "Previous restores the forward queue and the matching history display");
+        vm.NextCommand.Execute(null);
+        Check(vm.CurrentTrack == b && vm.QueueTimeline.Select(e => e.Track).SequenceEqual(new[] { a, b, c }),
+            "Next after a history jump follows the original queue order");
 
         vm.IsQueueOpen = true;
         var window = new MainWindow(vm);
@@ -59,10 +59,10 @@ internal static partial class Program
         }
         Layout();
         var list = Descendants(content).OfType<ListBox>().Single(l => l.Name == "QueueList");
-        Check(list.Items.OfType<QueueEntry>().Count() == 4 && Descendants(list).OfType<TextBlock>().Count(t => t.Text == "Current song") == 1,
+        Check(list.Items.OfType<QueueEntry>().Count() == 3 && Descendants(list).OfType<TextBlock>().Count(t => t.Text == "Current song") == 1,
             "Queue UI renders history, one labeled current song and upcoming tracks");
-        list.SelectedIndex = 3;
-        Check(vm.SelectedQueueIndex == 1 && vm.SelectedQueueEntry?.Track == c,
+        list.SelectedIndex = 2;
+        Check(vm.SelectedQueueIndex == 0 && vm.SelectedQueueEntry?.Track == c,
             "Visible row selection maps to the upcoming occurrence");
         vm.MoveQueueUpCommand.Execute(null);
         Layout();

@@ -253,16 +253,54 @@ internal sealed class QueueCoordinator
     public void PlayQueuedTrack()
     {
         if (!HasSelection) return;
-        var track = Queue[_state.SelectedQueueIndex];
-        Queue.RemoveAt(_state.SelectedQueueIndex);
+        var index = _state.SelectedQueueIndex;
+        var track = Queue[index];
+        var preceding = Queue.Take(index).ToArray();
+        for (var i = 0; i <= index; i++) Queue.RemoveAt(0);
+        // Jump over occurrences without decoding them or recording listening plays.
         var previous = _state.CurrentTrack;
-        var recycled = _state.RepeatMode == PlaybackRepeatMode.All && previous is not null;
-        if (recycled)
-            AddRecycledTrack(previous!);
-        var loaded = _state.LoadTrack(track, playImmediately: true, rememberCurrent: false);
-        RememberTrack(previous, recycled);
-        if (!loaded)
+        var recycle = _state.RepeatMode == PlaybackRepeatMode.All;
+        if (previous is not null)
+        {
+            if (recycle) AddRecycledTrack(previous);
+            _history.Push((previous, recycle));
+        }
+        foreach (var skipped in preceding)
+        {
+            if (recycle) AddRecycledTrack(skipped);
+            _history.Push((skipped, recycle));
+        }
+        _state.HistoryChanged();
+        if (!_state.LoadTrack(track, playImmediately: true, rememberCurrent: false))
             AdvanceQueue(recycleCurrent: false);
+    }
+
+    public void JumpToHistory(int index)
+    {
+        var history = _history.Reverse().ToArray();
+        if (index < 0 || index >= history.Length) return;
+        _currentPendingNextCycle = false;
+        var target = history[index].Track;
+        var following = history.Skip(index + 1).Select(e => e.Track).ToList();
+        if (_state.CurrentTrack is { } current) following.Add(current);
+        // Remove repeat-all copies for every occurrence being returned to the front.
+        // They may have been shuffled, so match from the tail rather than assuming a position.
+        for (var i = history.Length - 1; i >= index; i--)
+        {
+            var entry = _history.Pop();
+            if (!entry.Recycled) continue;
+            var recycledIndex = Enumerable.Range(0, Queue.Count).Reverse().FirstOrDefault(j =>
+                !_pendingCycle[j] && string.Equals(Queue[j].FilePath, entry.Track.FilePath, StringComparison.OrdinalIgnoreCase), -1);
+            if (recycledIndex < 0)
+                recycledIndex = Enumerable.Range(0, Queue.Count).Reverse().FirstOrDefault(j =>
+                    string.Equals(Queue[j].FilePath, entry.Track.FilePath, StringComparison.OrdinalIgnoreCase), -1);
+            if (recycledIndex >= 0) Queue.RemoveAt(recycledIndex);
+        }
+        for (var i = following.Count - 1; i >= 0; i--) Queue.Insert(0, following[i]);
+        _state.HistoryChanged();
+        if (!_state.LoadTrack(target, playImmediately: true, rememberCurrent: false))
+            AdvanceQueue(recycleCurrent: false);
+        _state.PreviousAvailabilityChanged();
     }
 
     public void RemoveFromQueue()

@@ -253,3 +253,8 @@ Shuffle settings offer Off, Tracks, Albums, Artists, and Reshuffle each loop. Al
 Artists preserve the relative order within each artist. Reshuffle each loop rebuilds the next pass with Repeat All,
 while Tracks repeats its visible order. Artist/album repetition rules guide shuffle boundaries wherever possible,
 without breaking groups or dropping songs. Settings save immediately and startup preserves the saved queue order.
+
+Playing a queue row (double-click or the row Play command) jumps to that occurrence. Earlier upcoming rows become
+history without playing, and playback continues with the row immediately after the selection. Playing a history
+row returns the following history and current rows to the front in their original order. Repeat All retains one
+copy of skipped rows for the next pass and removes those copies when jumping backwards.

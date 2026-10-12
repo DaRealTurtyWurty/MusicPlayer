@@ -69,9 +69,13 @@ public partial class QueuePanel : UserControl
     private void QueueList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left && e.OriginalSource is DependencyObject source &&
-            ItemsControl.ContainerFromElement(QueueList, source) is ListBoxItem &&
-            DataContext is MainViewModel vm && vm.PlayQueueEntryCommand.CanExecute(null))
-            vm.PlayQueueEntryCommand.Execute(null);
+            ItemsControl.ContainerFromElement(QueueList, source) is ListBoxItem { DataContext: QueueEntry entry } &&
+            DataContext is MainViewModel vm)
+        {
+            vm.SelectedQueueEntry = entry;
+            if (vm.PlayQueueEntryCommand.CanExecute(null)) vm.PlayQueueEntryCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void QueueEntry_ContextMenuOpening(object sender, ContextMenuEventArgs e)

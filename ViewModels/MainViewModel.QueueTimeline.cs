@@ -50,7 +50,7 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(HasTimelineSelection))]
     private void PlayQueueEntry()
     {
-        if (SelectedQueueEntry is not { } entry) return;
+        if (SelectedQueueEntry is not { } entry || !QueueTimeline.Contains(entry)) return;
         switch (entry.Kind)
         {
             case QueueEntryKind.Upcoming:
@@ -60,7 +60,7 @@ public partial class MainViewModel
                 Play();
                 break;
             case QueueEntryKind.History:
-                LoadTrack(entry.Track, playImmediately: true);
+                _queue.JumpToHistory(QueueTimeline.IndexOf(entry));
                 break;
         }
     }
