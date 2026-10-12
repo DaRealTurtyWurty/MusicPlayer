@@ -118,20 +118,37 @@ internal sealed class QueueCoordinator
             var artistCounts = remaining.GroupBy(g => ArtistKey(g[0].Track)).ToDictionary(g => g.Key, g => g.Count());
             var albumCounts = remaining.GroupBy(g => MusicGroup.AlbumKey(g[0].Track)).ToDictionary(g => g.Key, g => g.Count());
             var previous = newSession ? null : _state.CurrentTrack;
+            var secondPrevious = !newSession && _history.TryPeek(out var lastPlayed) ? lastPlayed.Track : null;
             while (remaining.Count > 0)
             {
                 int Conflicts(Track next) => previous is null ? 0 :
                     (_state.AvoidConsecutiveArtists && MusicGroup.Normalize(MusicGroup.ArtistName(previous)) == MusicGroup.Normalize(MusicGroup.ArtistName(next)) ? 1 : 0) +
                     (_state.AvoidConsecutiveAlbums && MusicGroup.AlbumKey(previous) == MusicGroup.AlbumKey(next) ? 1 : 0);
-                // Prefer the most represented remaining category to avoid stranding repeats at the end.
-                int Pressure(Track next) =>
-                    (_state.AvoidConsecutiveArtists ? artistCounts[ArtistKey(next)] : 0) +
-                    (_state.AvoidConsecutiveAlbums ? albumCounts[MusicGroup.AlbumKey(next)] : 0);
-                var chosen = remaining.OrderBy(g => Conflicts(g[0].Track)).ThenByDescending(g => Pressure(g[0].Track)).First();
+                var largestArtists = artistCounts.OrderByDescending(e => e.Value).Take(2).ToArray();
+                var largestAlbums = albumCounts.OrderByDescending(e => e.Value).Take(2).ToArray();
+                // Keep enough separators for the remaining songs, without always choosing
+                // the two largest categories. All equally suitable candidates retain random order.
+                int FutureRepeats(string key, Dictionary<string, int> counts, KeyValuePair<string, int>[] largest)
+                {
+                    var total = remaining.Count - 1;
+                    var count = counts[key] - 1;
+                    var otherMax = largest[0].Key == key ? (largest.Length > 1 ? largest[1].Value : 0) : largest[0].Value;
+                    return Math.Max(0, count - (total - count)) + Math.Max(0, otherMax - (total - otherMax + 1));
+                }
+                int StrandedRepeats(Track next) =>
+                    (_state.AvoidConsecutiveArtists ? FutureRepeats(ArtistKey(next), artistCounts, largestArtists) : 0) +
+                    (_state.AvoidConsecutiveAlbums ? FutureRepeats(MusicGroup.AlbumKey(next), albumCounts, largestAlbums) : 0);
+                int ReturnsTooSoon(Track next) => secondPrevious is null ? 0 :
+                    (_state.AvoidConsecutiveArtists && ArtistKey(secondPrevious) == ArtistKey(next) ? 1 : 0) +
+                    (_state.AvoidConsecutiveAlbums && MusicGroup.AlbumKey(secondPrevious) == MusicGroup.AlbumKey(next) ? 1 : 0);
+                var chosen = remaining.OrderBy(g => Conflicts(g[0].Track))
+                    .ThenBy(g => StrandedRepeats(g[0].Track))
+                    .ThenBy(g => ReturnsTooSoon(g[0].Track)).First();
                 arranged.Add(chosen);
                 remaining.Remove(chosen);
                 artistCounts[ArtistKey(chosen[0].Track)]--;
                 albumCounts[MusicGroup.AlbumKey(chosen[0].Track)]--;
+                secondPrevious = chosen.Length > 1 ? chosen[^2].Track : previous;
                 previous = chosen[^1].Track;
             }
             groups = arranged.ToArray();

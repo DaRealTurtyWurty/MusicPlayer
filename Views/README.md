@@ -258,3 +258,8 @@ Playing a queue row (double-click or the row Play command) jumps to that occurre
 history without playing, and playback continues with the row immediately after the selection. Playing a history
 row returns the following history and current rows to the front in their original order. Repeat All retains one
 copy of skipped rows for the next pass and removes those copies when jumping backwards.
+
+Artist/album shuffle rules also discourage returning to the artist/album from two songs ago. Candidate selection
+keeps random order among equally suitable songs and reserves enough separators to avoid stranding consecutive
+repeats, rather than always selecting the largest remaining categories. Cooldown relaxes when the available
+queue cannot support it; all occurrences and album/artist groups remain intact.

@@ -46,7 +46,7 @@
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,12" />
    <CheckBox Content="Avoid consecutive songs by the same artist" IsChecked="{Binding AvoidConsecutiveArtists, Mode=TwoWay}" />
    <CheckBox Content="Avoid consecutive songs from the same album" IsChecked="{Binding AvoidConsecutiveAlbums, Mode=TwoWay}" Margin="0,8,0,0" />
-   <TextBlock Text="Rules apply when shuffling, wherever possible. Album and artist groups stay together; rules guide their boundaries. Manually queued songs keep their priority. Settings are saved automatically."
+   <TextBlock Text="Rules apply when shuffling, wherever possible, including a short cooldown to avoid bouncing between two artists or albums. Album and artist groups stay together; rules guide their boundaries. Manually queued songs keep their priority. Settings are saved automatically."
               TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,24" />
    <TextBlock Text="ReplayGain" FontSize="18" Margin="0,0,0,12" />
    <CheckBox x:Name="ReplayGainEnabledCheckBox" Content="Normalize volume with ReplayGain"

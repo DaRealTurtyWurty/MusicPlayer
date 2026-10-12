@@ -48,6 +48,33 @@ internal static partial class Program
         vm.AvoidConsecutiveArtists = false;
         vm.AvoidConsecutiveArtists = true;
         Check(vm.Queue.Count == 2, "Impossible rules retain all songs and terminate");
+        for (var seed = 0; seed < 20; seed++)
+        {
+            using var variety = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), new FakePlayer(),
+                new Random(seed), monitorLibrary: false);
+            foreach (var artist in new[] { "A", "B", "C", "D" })
+                for (var i = 0; i < 15; i++) variety.Queue.Add(Song($"{artist}{i}", artist, artist, 1, (uint)(i + 1)));
+            variety.AvoidConsecutiveArtists = true;
+            variety.AvoidConsecutiveAlbums = true;
+            variety.ShuffleMode = PlaybackShuffleMode.Tracks;
+            var order = variety.Queue.Select(t => t.Artist).ToArray();
+            Check(order.Zip(order.Skip(1)).All(pair => pair.First != pair.Second),
+                $"Artist variety preserves the consecutive-repeat rule (seed {seed})");
+            Check(Enumerable.Range(2, 36).All(i => order[i] != order[i - 2]),
+                $"Artist cooldown prevents two-artist ping-pong while the queue has variety (seed {seed})");
+            Check(variety.Queue.Count == 60 && variety.Queue.Distinct().Count() == 60,
+                "Artist cooldown keeps every queued occurrence");
+        }
+        using (var boundary = new MainViewModel(new Picker(), new Picker(), new Metadata(), new Scanner(), new FakePlayer(),
+            new Random(42), monitorLibrary: false))
+        {
+            boundary.SelectedTrack = b1; boundary.PlaySelectedTrackCommand.Execute(null);
+            boundary.SelectedTrack = a1; boundary.PlaySelectedTrackCommand.Execute(null);
+            foreach (var song in new[] { b1, b2, c, c }) boundary.Queue.Add(song);
+            boundary.AvoidConsecutiveArtists = true;
+            boundary.ShuffleMode = PlaybackShuffleMode.Tracks;
+            Check(boundary.Queue[0] == c, "Cooldown includes current playback and history when reshuffling");
+        }
         var settings = new SettingsView { DataContext = vm };
         var settingsWindow = new System.Windows.Window { Content = settings, Width = 800, Height = 760, ShowInTaskbar = false };
         settingsWindow.Show();
